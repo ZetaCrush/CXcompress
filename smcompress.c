@@ -52,10 +52,12 @@ char* read_file_to_string(const char *filename) {
 
 void compress(const char *input_file, const char *output_file) {
     char* content=read_file_to_string(input_file);
+    char* dict=read_file_to_string("dict");
 }
 
 void decompress(const char *input_file, const char *output_file) {
     char* content=read_file_to_string(input_file);
+    char* dict=read_file_to_string("dict");
 }
 
 int main(int argc, char *argv[]) {
