@@ -1,12 +1,8 @@
 {
   "name": "smcompress",
   "version": "1.0.0",
-  "description": "smcompress is a lossless text compressor",
-  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+    "build": "gcc -o smcompress smcompress.c -Wall -Wextra",
+    "clean": "rm -f smcompress"
+  }
 }
