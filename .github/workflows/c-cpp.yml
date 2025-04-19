@@ -29,7 +29,7 @@ jobs:
       id: create_release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ github.ref_name }}  # Use ref_name instead of ref
+        tag_name: ${{ github.ref_name }}
         name: Release ${{ github.ref_name }}
         body: "Automated release"
         draft: false
@@ -42,7 +42,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-       upload_url: ${{ steps.create_release.outputs.upload_url }}  # Critical connection
+       upload_url: ${{ steps.create_release.outputs.upload_url }}
        asset_path: ./smcompress
        asset_name: smcompress-${{ github.ref_name }}
        asset_content_type: application/octet-stream
