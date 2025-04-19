@@ -9,7 +9,7 @@ char* read_file_to_string(const char *filename) {
 
     if (!file) {
         perror("Error opening file");
-        return "";
+        return NULL;
     }
 
     size_t chunk_size = 4096;
@@ -41,28 +41,45 @@ char* read_file_to_string(const char *filename) {
         }
     }
 
-    temp = realloc(buffer, total_read);
-    if (temp || total_read == 0) {
-        buffer = temp;
+    temp = realloc(buffer, total_read + 1);
+    if (!temp) {
+        free(buffer);
+        fclose(file);
+        return NULL;
     }
+    buffer = temp;
+    buffer[total_read] = '\0';
 
     fclose(file);
     return buffer;
 }
 
-void compress(const char *input_file, const char *output_file) {
+void compress(const char *input_file, const char *output_file, const char *dict_file) {
     char* content=read_file_to_string(input_file);
-    char* dict=read_file_to_string("dict");
+    char* dict=NULL;
+    if (dict_file == NULL) {
+        dict=read_file_to_string("dict");
+    } else {
+        dict=read_file_to_string(dict_file);
+    }
 }
 
-void decompress(const char *input_file, const char *output_file) {
+void decompress(const char *input_file, const char *output_file, const char *dict_file) {
     char* content=read_file_to_string(input_file);
-    char* dict=read_file_to_string("dict");
+    char* dict=NULL;
+    if (dict_file == NULL) {
+        dict=read_file_to_string("dict");
+    } else {
+        dict=read_file_to_string(dict_file);
+    }
+    fprintf("", "%s", content);
 }
+
+const char *dictionary_file = NULL;
 
 int main(int argc, char *argv[]) {
-    if (argc != 4) {
-        fprintf(stderr, "Usage: %s [-c|-d] <input_file> <output_file>\n", argv[0]);
+    if (argc < 4 || argc > 6) {
+        fprintf(stderr, "Usage: %s [-c|-d] <input_file> <output_file> [-dict dictionary_file]\n", argv[0]);
         return 1;
     }
 
@@ -70,17 +87,26 @@ int main(int argc, char *argv[]) {
     const char *input_file = argv[2];
     const char *output_file = argv[3];
 
+    if (argc == 6 && strcmp(argv[4], "-dict") == 0) {
+        dictionary_file = argv[5];
+        printf("Using dictionary: %s\n", dictionary_file);
+    } else if (argc == 5 || (argc == 6 && strcmp(argv[4], "-dict") != 0)) {
+        fprintf(stderr, "Error: Invalid usage of optional -dict argument.\n");
+        fprintf(stderr, "Usage: %s [-c|-d] <input_file> <output_file> [-dict dictionary_file]\n", argv[0]);
+        return 1;
+    }
+
     if (strcmp(flag, "-c") == 0) {
         printf("Compressing: %s -> %s\n", input_file, output_file);
-        compress(input_file, output_file);
+        compress(input_file, output_file, dictionary_file);
     } else if (strcmp(flag, "-d") == 0) {
         printf("Decompressing: %s -> %s\n", input_file, output_file);
-        decompress(input_file, output_file);
+        decompress(input_file, output_file, dictionary_file);
     } else {
         fprintf(stderr, "Error: Invalid flag. Use -c for compress or -d for decompress.\n");
-        fprintf(stderr, "Usage: %s [-c|-d] <input_file> <output_file>\n", argv[0]);
         return 1;
     }
 
     return 0;
 }
+
