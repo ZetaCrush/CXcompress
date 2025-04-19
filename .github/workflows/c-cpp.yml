@@ -36,12 +36,12 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
-    - name: Upload Release Assets
+    - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dist/*.zip # Path to your built files
-        asset_name: myapp-${{ github.ref }}.zip
-        asset_content_type: application/zip
+       upload_url: ${{ steps.create_release.outputs.upload_url }}  # Critical connection
+       asset_path: ./smcompress
+       asset_name: smcompress-${{ github.ref_name }}
+       asset_content_type: application/octet-stream
