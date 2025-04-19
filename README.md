@@ -1,2 +1,2 @@
 # smcompress
-Smcompress is a lossless text compressor
+Smcompress is a lossless text compressor with the vision of being the best open-source compressor on the internet
