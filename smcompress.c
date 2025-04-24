@@ -1,127 +1,25 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <zstd.h>
-#include <ctype.h>
-#include <errno.h>
-#include <stdint.h>
-#include <stdbool.h>
-#include "uthash.h"
-
-#define MAX_DICT_SIZE 50000
-#define SEP ",.;?!\n-"
-#define M 252
-
-char* read_file_to_string(const char *filename) {
-    FILE *file = fopen(filename, "rb");
-
-    if (!file) {
-        perror("Error opening file");
-        return NULL;
-    }
-
-    size_t chunk_size = 4096;
-    size_t total_read = 0;
-    char *buffer = NULL;
-    char *temp;
-
-    while (1) {
-        temp = realloc(buffer, total_read + chunk_size);
-        if (!temp) {
-            perror("Memory allocation failed");
-            free(buffer);
-            fclose(file);
-            return buffer;
-        }
-        buffer = temp;
-
-        size_t bytes_read = fread(buffer + total_read, 1, chunk_size, file);
-        total_read += bytes_read;
-
-        if (bytes_read < chunk_size) {
-            if (ferror(file)) {
-                perror("Error reading file");
-                free(buffer);
-                fclose(file);
-                return buffer;
-            }
-            break;
-        }
-    }
-
-    temp = realloc(buffer, total_read + 1);
-    if (!temp) {
-        free(buffer);
-        fclose(file);
-        return NULL;
-    }
-    buffer = temp;
-    buffer[total_read] = '\0';
-
-    fclose(file);
-    return buffer;
-}
-
-
-bool is_sep(char c) {
-    return strchr(SEP, c) != NULL;
-}
-
-char **split(char *s, char sep, size_t *out_count) {
-    char **tokens = malloc(sizeof(char*) * 100000); // overallocate
-    if (!tokens) {
-        fprintf(stderr, "split(): failed to allocate tokens array\n");
-        exit(1);
-    }
-    size_t count = 0;
-    char delim[2] = {sep, '\0'};
-    char *token = strtok(s, delim);
-    while (token) {
-        tokens[count++] = token;
-        token = strtok(NULL, delim);
-    }
-    *out_count = count;
-    return tokens;
-}
-
-void find_unused_chars(const char *text, char *C0, char *C1) {
-    bool used[256] = { false };
-    for (const char *p = text; *p; ++p) {
-        used[(unsigned char)(*p)] = true;
-    }
-    for (int i = 1; i < 256; ++i) {
-        if (!used[i] && i != '0' && i != '1') {
-            *C0 = (char)i;
-            for (int j = i + 1; j < 256; ++j) {
-                if (!used[j] && j != '0' && j != '1') {
-                    *C1 = (char)j;
-                    return;
-                }
-            }
-        }
-    }
-    fprintf(stderr, "Could not find two unused characters\n");
-    exit(1);
-}
+#include "utils.h"
+#include "utils.c"
 
 void compress(const char *input_file, const char *output_file, const char *dict_file) {
     char* content_raw = read_file_to_string(input_file);
     char* dict_raw_original = read_file_to_string(dict_file ? dict_file : "dict");
 
+    printf("read raw files \n");
     if (!content_raw || !dict_raw_original) {
-        fprintf(stderr, "Error reading input or dictionary file\n");
+        printf("Error reading input or dictionary file\n");
         exit(1);
     }
+
+    // content_raw[50000] = 0;
 
     char *content = strdup(content_raw);
     char *dict_raw = strdup(dict_raw_original);
     if (!content || !dict_raw) {
-        fprintf(stderr, "strdup failed\n");
+        printf("strdup failed\n");
         exit(1);
     }
-
-    size_t dict_count;
-    char **dict = split(dict_raw, '\n', &dict_count);
 
     int freq[256] = {0};
     for (char *p = content_raw; *p; ++p) freq[(unsigned char)*p]++;
@@ -129,80 +27,92 @@ void compress(const char *input_file, const char *output_file, const char *dict_
     for (int i = 0; i < 256; ++i) {
         if (freq[i] > freq[(unsigned char)mc]) mc = (char)i;
     }
-
+    // Unused Char
     char C0 = 0, C1 = 0;
     find_unused_chars(content_raw, &C0, &C1);
 
-    char symbols[MAX_DICT_SIZE][2];
+    // Load Dictionary
+    size_t dict_count;
+    char **dict = split_lines(dict_raw, &dict_count);
 
-    size_t word_count;
-    char **words = split(content, mc, &word_count);
+    // Top Chars
+    char top_chars[TOP_N];
+    get_most_common_chars(content_raw, top_chars, 1); // exclude space
 
-    size_t out_size = 0, out_cap = 4096;
-    char *output = malloc(out_cap);
-    if (!output) {
-        fprintf(stderr, "Failed to allocate output buffer\n");
-        exit(1);
+    for (int i = 0; i < dict_count && i < MAX_DICT_SIZE; ++i) {
+        add_to_dict_set(dict[i]);
     }
-    output[0] = '\0';
+    // Symbols
+    char *symbols[MAX_DICT_SIZE];
+    generate_symbols(top_chars, symbols, dict_count);
 
-    size_t final_len = strlen(output);
-    char *final_string = malloc(final_len + 4);
-    if (!final_string) {
-        fprintf(stderr, "Failed to allocate final string\n");
-        exit(1);
-    }
-    snprintf(final_string, final_len + 4, "%c%c%c%s", C0, C1, mc, output);
+    printf("dict_count: %d \n", dict_count);
 
-    size_t final_size = strlen(final_string);
-    size_t max_comp = ZSTD_compressBound(final_size);
-    void* compressed = malloc(max_comp);
-    if (!compressed) {
-        fprintf(stderr, "Failed to allocate compressed buffer\n");
-        exit(1);
-    }
-    size_t compressed_size = ZSTD_compress(compressed, max_comp, final_string, final_size, 3);
-
-    if (ZSTD_isError(compressed_size)) {
-        fprintf(stderr, "Compression failed: %s\n", ZSTD_getErrorName(compressed_size));
-        exit(1);
+    // map vocab to symbols
+    for (int i = 0; i < dict_count && i < MAX_DICT_SIZE; ++i) {
+        add_mapping(dict[i], symbols[i]);
     }
 
-    FILE *out = fopen(output_file, "wb");
-    if (!out) {
-        perror("fopen output file");
-        exit(1);
-    }
-    fwrite(compressed, 1, compressed_size, out);
-    fclose(out);
+    // File Content
 
-    free(compressed);
-    free(content_raw);
-    free(content);
-    free(dict_raw_original);
-    free(dict_raw);
-    free(output);
-    free(final_string);
-    free(dict);
-    free(words);
+    char *replaced = process_words(content, C0, C1, top_chars);
+    printf("replaced, size=%d\n", strlen(replaced));
+
+    // Final: compress
+    compress_with_zstd(replaced, output_file);
+    printf("✅ Compression complete. Output: %s\n", output_file);
+
+    // Cleanup
+    // free(replaced);
+    // for (int i = 0; i < dict_count; ++i) free(dict[i]);
+    // for (int i = 0; i < MAX_DICT_SIZE; ++i) free(symbols[i]);
 }
 
 
 void decompress(const char *input_file, const char *output_file, const char *dict_file) {
-    char* content=read_file_to_string(input_file);
-    char* dict=NULL;
-    if (dict_file == NULL) {
-        dict=read_file_to_string("dict");
-    } else {
-        dict=read_file_to_string(dict_file);
+    char* content_raw = read_file_to_string(input_file);
+    char* dict_raw_original = read_file_to_string(dict_file ? dict_file : "dict");
+
+    if (!content_raw || !dict_raw_original) {
+        printf("Error reading input or dictionary file\n");
+        exit(1);
     }
+
+
+    char *dict_raw = strdup(dict_raw_original);
+    char *content = strdup(content_raw);
+
+    size_t dict_count = 0;    
+    char **dict = split_lines(dict_raw, &dict_count);
+    
+    size_t decompressed_size;
+    char *decompressed_data = decompress_zstd(input_file, &decompressed_size);
+    if (!decompressed_data) return;
+
+    char *original_text = decode_symbols(decompressed_data, dict, dict_count);
+    size_t original_text_size = strlen(original_text);
+
+    printf("original text size: %d\n", original_text_size);
+    FILE *fp = fopen(output_file, "wb");
+    if (!fp) {
+        fprintf(stderr, "Failed to open output file: %s\n", original_text);
+        free(decompressed_data);
+        free(original_text);
+        return;
+    }
+
+    size_t written = fwrite(original_text, 1, original_text_size, fp);
+    fclose(fp);
+    free(decompressed_data);
+    free(original_text);
+    return;
 }
 
 const char *dictionary_file = NULL;
 
 int main(int argc, char *argv[]) {
     if (argc < 4 || argc > 6) {
-        fprintf(stderr, "Usage: %s [-c|-d] <input_file> <output_file> [-dict dictionary_file]\n", argv[0]);
+        printf("Usage: %s [-c|-d] <input_file> <output_file> [-dict dictionary_file]\n", argv[0]);
         return 1;
     }
 
@@ -214,8 +124,8 @@ int main(int argc, char *argv[]) {
         dictionary_file = argv[5];
         printf("Using dictionary: %s\n", dictionary_file);
     } else if (argc == 5 || (argc == 6 && strcmp(argv[4], "-dict") != 0)) {
-        fprintf(stderr, "Error: Invalid usage of optional -dict argument.\n");
-        fprintf(stderr, "Usage: %s [-c|-d] <input_file> <output_file> [-dict dictionary_file]\n", argv[0]);
+        printf("Error: Invalid usage of optional -dict argument.\n");
+        printf("Usage: %s [-c|-d] <input_file> <output_file> [-dict dictionary_file]\n", argv[0]);
         return 1;
     }
 
@@ -226,7 +136,7 @@ int main(int argc, char *argv[]) {
         printf("Decompressing: %s -> %s\n", input_file, output_file);
         decompress(input_file, output_file, dictionary_file);
     } else {
-        fprintf(stderr, "Error: Invalid flag. Use -c for compress or -d for decompress.\n");
+        printf("Error: Invalid flag. Use -c for compress or -d for decompress.\n");
         return 1;
     }
 
