@@ -12,7 +12,7 @@ void compress(const char *input_file, const char *output_file, const char *dict_
         exit(1);
     }
 
-    // content_raw[50000] = 0;
+    content_raw[50000] = 0;
 
     char *content = strdup(content_raw);
     char *dict_raw = strdup(dict_raw_original);
@@ -37,25 +37,26 @@ void compress(const char *input_file, const char *output_file, const char *dict_
 
     // Top Chars
     char top_chars[TOP_N];
-    get_most_common_chars(content_raw, top_chars, 1); // exclude space
+    size_t top_char_count = get_most_common_chars(content_raw, top_chars, 1); // exclude space
 
-    for (int i = 0; i < dict_count && i < MAX_DICT_SIZE; ++i) {
-        add_to_dict_set(dict[i]);
-    }
+    // for (int i = 0; i < dict_count && i < MAX_DICT_SIZE; ++i) {
+    //     add_to_dict_set(dict[i]);
+    // }
     // Symbols
     char *symbols[MAX_DICT_SIZE];
-    generate_symbols(top_chars, symbols, dict_count);
+    size_t symbol_count = generate_symbols(top_chars, symbols, top_char_count);
 
-    printf("dict_count: %d \n", dict_count);
+    printf("top_char_count: %d \n", top_char_count);
+    printf("symbol_count: %d \n", symbol_count);
 
     // map vocab to symbols
-    for (int i = 0; i < dict_count && i < MAX_DICT_SIZE; ++i) {
+    for (int i = 0; i < dict_count && i < symbol_count; ++i) {
         add_mapping(dict[i], symbols[i]);
     }
 
     // File Content
 
-    char *replaced = process_words(content, C0, C1, top_chars);
+    char *replaced = process_words(content, C0, C1, top_chars, top_char_count);
     printf("replaced, size=%d\n", strlen(replaced));
 
     // Final: compress

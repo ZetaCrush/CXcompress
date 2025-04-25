@@ -1,10 +1,10 @@
 #include "utils.h"
 
 #define MAX_DICT_SIZE 50000
-#define SEP ",.;?!\n-"
+#define SEP ",.;?!\n"
 #define M 252
 
-#define TOP_N 36
+#define TOP_N 35
 
 // Helper macro for debugging
 #define DEBUG_PRINT(fmt, ...) \
@@ -47,7 +47,7 @@ int cmp_freq(const void *a, const void *b) {
 }
 
 // Function to get top 35 most common characters
-void get_most_common_chars(const char *content_raw, char *result, int exclude_space) {
+int get_most_common_chars(const char *content_raw, char *result, int exclude_space) {
     int freq[256] = {0};
 
     for (const char *p = content_raw; *p; ++p) {
@@ -62,12 +62,18 @@ void get_most_common_chars(const char *content_raw, char *result, int exclude_sp
 
     qsort(freqs, 256, sizeof(CharFreq), cmp_freq);
 
-    int count = 0;
-    for (int i = 0; i < 256 && count < TOP_N; ++i) {
-        if (exclude_space && freqs[i].ch == ' ') continue;
-        if(!is_sep(freqs[i].ch)) // Use only no-sep chars
-            result[count++] = freqs[i].ch;
+    int count = 0, index = 0;
+    for (int i = 0; i < 256 && index < TOP_N; ++i) {
+        if (exclude_space && freqs[i].ch == ' '){
+            index++;
+            continue;
+        }
+        index++;
+        result[count++] = freqs[i].ch;
     }
+
+    result[count] = 0;
+    return count;
 }
 char* read_file_to_string(const char *filename) {
     FILE *file = fopen(filename, "rb");
@@ -219,32 +225,32 @@ int symbol_exists_in_dict(const char *symbol, char **dict, int dict_count) {
     return 0;
 }
 
-int generate_symbols(char top_chars[TOP_N], char *symbols[], int max_needed) {
+int generate_symbols(char top_chars[TOP_N], char *symbols[], int top_char_count) {
     int index = 0;
     char temp[4];
 
     // 1-char
-    for (int i = 0; i < TOP_N && index < max_needed; ++i) {
+    for (int i = 0; i < top_char_count; ++i) {
         temp[0] = top_chars[i]; temp[1] = '\0';
-        if (!dict_contains(temp)) symbols[index++] = strdup(temp);
+        symbols[index++] = strdup(temp);
     }
 
     // 2-char
-    for (int i = 0; i < TOP_N && index < max_needed; ++i) {
-        for (int j = 0; j < TOP_N && index < max_needed; ++j) {
+    for (int i = 0; i < top_char_count; ++i) {
+        for (int j = 0; j < top_char_count; ++j) {
             if (is_sep(top_chars[j])) continue;
             temp[0] = top_chars[i]; temp[1] = top_chars[j]; temp[2] = '\0';
-            if (!dict_contains(temp)) symbols[index++] = strdup(temp);
+            symbols[index++] = strdup(temp);
         }
     }
 
     // 3-char
-    for (int i = 0; i < TOP_N && index < max_needed; ++i) {
-        for (int j = 0; j < TOP_N && index < max_needed; ++j) {
-            for (int k = 0; k < TOP_N && index < max_needed; ++k) {
+    for (int i = 0; i < top_char_count; ++i) {
+        for (int j = 0; j < top_char_count; ++j) {
+            for (int k = 0; k < top_char_count; ++k) {
                 if (is_sep(top_chars[k])) continue;
                 temp[0] = top_chars[i]; temp[1] = top_chars[j]; temp[2] = top_chars[k]; temp[3] = '\0';
-                if (!dict_contains(temp)) symbols[index++] = strdup(temp);
+                symbols[index++] = strdup(temp);
             }
         }
     }
@@ -350,7 +356,7 @@ static inline int append_to_string_array(char ***array, size_t *count, size_t *c
 }
 
 // Main function to process the input string and return as a single char* string
-char* process_words(const char *s, char C0, char C1, const char *one_char_symbols) {
+char* process_words(const char *s, char C0, char C1, const char *one_char_symbols, size_t top_char_count) {
     size_t new_words_capacity = 1000;
     char **new_words = malloc(new_words_capacity * sizeof(char*));
     if (!new_words) return NULL;
@@ -382,33 +388,33 @@ char* process_words(const char *s, char C0, char C1, const char *one_char_symbol
                 strncpy(base, word, word_len - 1);
                 base[word_len - 1] = '\0';
                 const char *sym2 = get_symbol_by_word(base);
-                if (sym2) {
+                if (sym2) { // word[:-1] in d and word[-1] in SEP:
                     char *combined = malloc(strlen(sym2) + 2);
                     sprintf(combined, "%s%c", sym2, word[word_len - 1]);
                     append_to_string_array(&new_words, &new_words_count, &new_words_capacity, combined, space_n);
                     // new_words[new_words_count++] = combined;
                 } else {
                     const char *gfound = get_word_by_symbol(base);
-                    if (gfound) {
+                    if (gfound) { // word[:-1] in g and word[-1] in SEP:
                         char *marked = malloc(strlen(word) + 2);
                         sprintf(marked, "%s%c", word, C0);
                         // if(space_n > 3)
                         //     printf("%s %s| %d\n", word, marked, space_n);
                         append_to_string_array(&new_words, &new_words_count, &new_words_capacity, marked, space_n);
                         // new_words[new_words_count++] = marked;
-                    } else {
+                    } else { // else: # Default case, word is not common
                         append_to_string_array(&new_words, &new_words_count, &new_words_capacity, strdup(word), space_n);
                         // new_words[new_words_count++] = strdup(word);
                     }
                 }
             } else {
                 const char *gfound = get_word_by_symbol(word);
-                if (gfound) {
+                if (gfound) { // elif word in g: # Word is a used symbol, add a marker
                     char *marked = malloc(strlen(word) + 2);
                     sprintf(marked, "%c%s", C0, word);
                     append_to_string_array(&new_words, &new_words_count, &new_words_capacity, marked, space_n);
                     // new_words[new_words_count++] = marked;
-                } else {
+                } else { // else: # Default case, word is not common
                     append_to_string_array(&new_words, &new_words_count, &new_words_capacity, strdup(word), space_n);
                     // new_words[new_words_count++] = strdup(word);
                 }
@@ -440,6 +446,10 @@ char* process_words(const char *s, char C0, char C1, const char *one_char_symbol
 
     char *p = result;
     *p++ = C0;
+    char *nr = malloc(2); // represent length one_char symbols in 1 byte
+    sprintf(nr, "%c", top_char_count);
+    strcpy(p, nr);
+    p++;
     *p++ = C1;
     strcpy(p, one_char_symbols);
     p += strlen(one_char_symbols);
@@ -546,12 +556,16 @@ char *decompress_zstd(const char *filename, size_t *out_size) {
 // === Step 2-5: Decode & Reconstruct ===
 char *decode_symbols(const char *compressed, char** dict, size_t dict_count) {
     const char C0 = compressed[0];
-    const char C1 = compressed[1];
+    const char nr = compressed[1];
+    const char C1 = compressed[2];
 
-    const char *ptr = compressed + 2;
-    char one_char_symbols[TOP_N + 1];
+    size_t top_char_count = nr;
+
+
+    const char *ptr = compressed + 3;
+    char one_char_symbols[top_char_count + 1];
     int i = 0;
-    while (*ptr && *ptr != C1 && i < TOP_N) {
+    while (*ptr && *ptr != C1 && i < top_char_count) {
         one_char_symbols[i++] = *ptr++;
     }
     one_char_symbols[i] = '\0';
@@ -559,16 +573,16 @@ char *decode_symbols(const char *compressed, char** dict, size_t dict_count) {
     
     const char *new_words_text = ptr;
 
-    for (int i = 0; i < dict_count && i < MAX_DICT_SIZE; ++i) {
-        add_to_dict_set(dict[i]);
-    }
+    // for (int i = 0; i < dict_count && i < MAX_DICT_SIZE; ++i) {
+    //     add_to_dict_set(dict[i]);
+    // }
     // Generate all possible symbols (1, 2, 3-char combinations)
     char **symbols = malloc(sizeof(char*) * MAX_DICT_SIZE);
-    int symbol_count = generate_symbols(one_char_symbols, symbols, dict_count);
+    int symbol_count = generate_symbols(one_char_symbols, symbols, top_char_count);
 
-    printf("dict_count: %d\n", dict_count);
+    printf("symbol_count: %d\n", symbol_count);
     // Populate dummy mapping for demonstration (this should be replaced with actual dictionary loading)
-    for (int i = 0; i < dict_count && i < MAX_DICT_SIZE; ++i) {
+    for (int i = 0; i < dict_count && i < symbol_count; ++i) {
         add_mapping(dict[i], symbols[i]);
     }
 
