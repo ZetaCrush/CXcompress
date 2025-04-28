@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include "utils.h"
 #include "utils.c"
+#include <time.h>
 
-void compress(const char *input_file, const char *output_file, const char *dict_file) {
+void compress(const char *input_file, const char *output_file, const char *dict_file, size_t thread_count) {
     char* content_raw = read_file_to_string(input_file);
     char* dict_raw_original = read_file_to_string(dict_file ? dict_file : "dict");
 
@@ -12,7 +13,7 @@ void compress(const char *input_file, const char *output_file, const char *dict_
         exit(1);
     }
 
-    content_raw[50000] = 0;
+    // content_raw[50000] = 0;
 
     char *content = strdup(content_raw);
     char *dict_raw = strdup(dict_raw_original);
@@ -56,7 +57,7 @@ void compress(const char *input_file, const char *output_file, const char *dict_
 
     // File Content
 
-    char *replaced = process_words(content, C0, C1, top_chars, top_char_count);
+    char *replaced = process_words(content, C0, C1, top_chars, top_char_count, thread_count);
     printf("replaced, size=%d\n", strlen(replaced));
 
     // Final: compress
@@ -112,27 +113,36 @@ void decompress(const char *input_file, const char *output_file, const char *dic
 const char *dictionary_file = NULL;
 
 int main(int argc, char *argv[]) {
-    if (argc < 4 || argc > 6) {
-        printf("Usage: %s [-c|-d] <input_file> <output_file> [-dict dictionary_file]\n", argv[0]);
+    if (argc < 5 || argc > 8) {
+        printf("Usage: %s [-c|-d] <input_file> <output_file> [-t] <thread_count> [-dict dictionary_file]\n", argv[0]);
         return 1;
     }
 
     const char *flag = argv[1];
     const char *input_file = argv[2];
     const char *output_file = argv[3];
+    const char *thread_count = argv[5];
 
-    if (argc == 6 && strcmp(argv[4], "-dict") == 0) {
-        dictionary_file = argv[5];
+    size_t n_thread = 1;
+    sscanf(thread_count, "%d", &n_thread);
+
+    if (argc == 8 && strcmp(argv[7], "-dict") == 0) {
+        dictionary_file = argv[8];
         printf("Using dictionary: %s\n", dictionary_file);
-    } else if (argc == 5 || (argc == 6 && strcmp(argv[4], "-dict") != 0)) {
+    } else if (argc == 7 || (argc == 6 && strcmp(argv[4], "-dict") != 0)) {
         printf("Error: Invalid usage of optional -dict argument.\n");
-        printf("Usage: %s [-c|-d] <input_file> <output_file> [-dict dictionary_file]\n", argv[0]);
+        printf("Usage: %s [-c|-d] <input_file> <output_file> -t <thread_count> [-dict dictionary_file]\n", argv[0]);
         return 1;
     }
 
+    clock_t start, end;
+    double cpu_time_used;
+    // Start timer
+    start = clock();
+
     if (strcmp(flag, "-c") == 0) {
-        printf("Compressing: %s -> %s\n", input_file, output_file);
-        compress(input_file, output_file, dictionary_file);
+        printf("Compressing: %s -> %s with %d Tread\n", input_file, output_file, n_thread);
+        compress(input_file, output_file, dictionary_file, n_thread);
     } else if (strcmp(flag, "-d") == 0) {
         printf("Decompressing: %s -> %s\n", input_file, output_file);
         decompress(input_file, output_file, dictionary_file);
@@ -140,6 +150,13 @@ int main(int argc, char *argv[]) {
         printf("Error: Invalid flag. Use -c for compress or -d for decompress.\n");
         return 1;
     }
+    // End timer
+    end = clock();
+
+    // Calculate elapsed time
+    cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+
+    printf("Elapsed time: %.3f seconds\n", cpu_time_used);
 
     return 0;
 }

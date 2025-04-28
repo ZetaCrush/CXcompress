@@ -1,5 +1,8 @@
 #include "utils.h"
 
+#include <pthread.h>
+
+// #define THREAD_COUNT 4 // or however many you want
 #define MAX_DICT_SIZE 50000
 #define SEP ",.;?!\n"
 #define M 252
@@ -34,6 +37,15 @@ typedef struct {
     char key[64];
     UT_hash_handle hh;
 } dict_entry;
+
+typedef struct {
+    const char *chunk_start;
+    size_t chunk_len;
+    char **new_words;
+    size_t new_words_count;
+    size_t new_words_capacity;
+    char C0;
+} ThreadData;
 
 dict_entry *dict_set = NULL;
 SymbolMap *symbol_to_word = NULL;
@@ -355,8 +367,12 @@ static inline int append_to_string_array(char ***array, size_t *count, size_t *c
     return 1;
 }
 
-// Main function to process the input string and return as a single char* string
-char* process_words(const char *s, char C0, char C1, const char *one_char_symbols, size_t top_char_count) {
+void *process_chunk(void *arg) {
+    ThreadData *data = (ThreadData *)arg;
+
+    const char *s = data->chunk_start;
+    char C0 = data->C0;
+    size_t len = data->chunk_len;
     size_t new_words_capacity = 1000;
     char **new_words = malloc(new_words_capacity * sizeof(char*));
     if (!new_words) return NULL;
@@ -365,7 +381,7 @@ char* process_words(const char *s, char C0, char C1, const char *one_char_symbol
     char word[128];
     size_t word_len = 0;
 
-    for (size_t i = 0;; ++i) {
+    for (size_t i = 0; i <= len; ++i) {
         char c = s[i];
 
         if (c == ' ' || c == '\0') {
@@ -422,14 +438,150 @@ char* process_words(const char *s, char C0, char C1, const char *one_char_symbol
 
             word_len = 0;
             if (c == '\0'){
-                printf(" End of FILE ! ");
+                // printf(" End of FILE ! ");
                 break;
             }
         } else {
             word[word_len++] = c;
         }
     }
-    printf("new_words_count = %d \n", new_words_count);
+    data->new_words = new_words;
+    data->new_words_count = new_words_count;
+    data->new_words_capacity = new_words_capacity;
+
+    return NULL;
+}
+
+// Main function to process the input string and return as a single char* string
+char* process_words(const char *s, char C0, char C1, const char *one_char_symbols, size_t top_char_count, size_t thread_count) {
+    // size_t new_words_capacity = 1000;
+    // char **new_words = malloc(new_words_capacity * sizeof(char*));
+    // if (!new_words) return NULL;
+
+    // size_t new_words_count = 0;
+    // char word[128];
+    // size_t word_len = 0;
+
+    // for (size_t i = 0;; ++i) {
+    //     char c = s[i];
+
+    //     if (c == ' ' || c == '\0') {
+    //         word[word_len] = '\0';
+    //         int space_n = 0;
+    //         while (s[i+1] == ' ')
+    //         {
+    //             space_n++;
+    //             i++;
+    //             /* code */
+    //         }
+            
+    //         const char *sym = get_symbol_by_word(word);
+
+    //         if (sym) {
+    //             append_to_string_array(&new_words, &new_words_count, &new_words_capacity, strdup(sym), space_n);
+    //             // new_words[new_words_count++] = strdup(sym);
+    //         } else if (word_len > 1 && is_sep(word[word_len - 1])) {
+    //             char base[128];
+    //             strncpy(base, word, word_len - 1);
+    //             base[word_len - 1] = '\0';
+    //             const char *sym2 = get_symbol_by_word(base);
+    //             if (sym2) {
+    //                 char *combined = malloc(strlen(sym2) + 2);
+    //                 sprintf(combined, "%s%c", sym2, word[word_len - 1]);
+    //                 append_to_string_array(&new_words, &new_words_count, &new_words_capacity, combined, space_n);
+    //                 // new_words[new_words_count++] = combined;
+    //             } else {
+    //                 const char *gfound = get_word_by_symbol(base);
+    //                 if (gfound) {
+    //                     char *marked = malloc(strlen(word) + 2);
+    //                     sprintf(marked, "%s%c", word, C0);
+    //                     // if(space_n > 3)
+    //                     //     printf("%s %s| %d\n", word, marked, space_n);
+    //                     append_to_string_array(&new_words, &new_words_count, &new_words_capacity, marked, space_n);
+    //                     // new_words[new_words_count++] = marked;
+    //                 } else {
+    //                     append_to_string_array(&new_words, &new_words_count, &new_words_capacity, strdup(word), space_n);
+    //                     // new_words[new_words_count++] = strdup(word);
+    //                 }
+    //             }
+    //         } else {
+    //             const char *gfound = get_word_by_symbol(word);
+    //             if (gfound) {
+    //                 char *marked = malloc(strlen(word) + 2);
+    //                 sprintf(marked, "%c%s", C0, word);
+    //                 append_to_string_array(&new_words, &new_words_count, &new_words_capacity, marked, space_n);
+    //                 // new_words[new_words_count++] = marked;
+    //             } else {
+    //                 append_to_string_array(&new_words, &new_words_count, &new_words_capacity, strdup(word), space_n);
+    //                 // new_words[new_words_count++] = strdup(word);
+    //             }
+    //         }
+
+    //         word_len = 0;
+    //         if (c == '\0'){
+    //             printf(" End of FILE ! ");
+    //             break;
+    //         }
+    //     } else {
+    //         word[word_len++] = c;
+    //     }
+    // }
+    // printf("new_words_count = %d \n", new_words_count);
+
+    pthread_t threads[thread_count];
+    ThreadData thread_data[thread_count];
+
+    size_t len = strlen(s);
+    size_t chunk_size = len / thread_count;
+
+    size_t last_end = 0;
+
+    printf("chunk_size=%d\n", chunk_size);
+    for (int t = 0; t < thread_count; ++t) {
+        size_t start = last_end;
+        size_t end = (t == thread_count - 1) ? len : (t + 1) * chunk_size;
+
+        // IMPORTANT: Adjust the end to the next space, so we don't split words in half
+        while (end < len && s[end] != ' ' && s[end] != '\0') {
+            end++;
+        }
+
+        if(s[end] == ' ') // IMPORTANT: should leave a space a EOF at the end of each chunk
+            end++;
+
+        last_end = end;
+
+        thread_data[t].chunk_start = s + start;
+        thread_data[t].chunk_len = end - start;
+        thread_data[t].C0 = C0;
+
+        pthread_create(&threads[t], NULL, process_chunk, &thread_data[t]);
+    }
+
+    for (int t = 0; t < thread_count; ++t) {
+        pthread_join(threads[t], NULL);
+    }
+
+    // Merge results
+    size_t new_words_count = 0;
+    for (int t = 0; t < thread_count; ++t) {
+        new_words_count += thread_data[t].new_words_count;
+    }
+    new_words_count++;
+    char **new_words = malloc(new_words_count * sizeof(char*)); // adjust size as needed
+    new_words_count = 0; // re-initialize for indexing
+
+    for (int t = 0; t < thread_count; ++t) {
+        for (size_t i = 0; i < thread_data[t].new_words_count; ++i) {
+            new_words[new_words_count++] = thread_data[t].new_words[i];
+        }
+        free(thread_data[t].new_words);
+    }
+
+    // NULL-terminate if needed
+    new_words[new_words_count] = NULL;
+
+    // printf("new_words_count: %d\n", new_words_count);
 
     // Build final result
     size_t result_len = 3 + strlen(one_char_symbols); // C0, C1, and symbols + 1 C1
