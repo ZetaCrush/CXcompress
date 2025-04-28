@@ -1,23 +1,23 @@
-# smcompress
-Smcompress is a lossless text compressor with the vision of being the best open-source compressor on the internet
+# cxcompress
+Cxcompress is a lossless text compressor with the vision of being the best open-source compressor on the internet
 
 # Compile
 ```
-    gcc -o run .\smcompress.c -lzstd
+    gcc -o run cxcompress.c -lzstd
 ```
 
 # Usage
 ```
-    run.exe [-c|-d] <input_file> <output_file> [-dict dictionary_file]
+    ./run [-c|-d] <input_file> <output_file> [-dict dictionary_file]
 ```
 
 ### Compress
 ```
-    .\run.exe -c .\dickens .\dickens.comp -dict dict
+    .\run -c dickens compressed -dict dict
 ```
 ### De-Compress
 ```
-    .\run.exe -d .\dickens.comp .\dickens.restore -dict dict
+    .\run -d compressed dickens.restore -dict dict
 ```
 
 # Check Result
