@@ -1,3 +1,6 @@
+// Full corrected version of your compression/decompression tool
+// with token-level parallelism to fix symbol boundary issues.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -210,9 +213,6 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
         return;
     }
 
-    HashEntry* current;
-    HashEntry* tmp;
-
     char escape_char = input_buffer[0];
     const char* data = input_buffer + 1;
     size_t data_len = input_len - 1;
@@ -227,6 +227,7 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
 
     char** segments = malloc(sizeof(char*) * threads);
     size_t* seg_lens = calloc(threads, sizeof(size_t));
+    bool* seg_ends_with_space = calloc(threads, sizeof(bool));
 
     #pragma omp parallel num_threads(threads)
     {
@@ -234,21 +235,26 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
         size_t start = (data_len * tid) / threads;
         size_t end = (data_len * (tid + 1)) / threads;
 
+        // Align to token boundaries
         while (start > 0 && data[start] != ' ') start++;
         while (end < data_len && data[end] != ' ') end++;
 
         char* buffer = malloc((end - start + 1) * 8);
         size_t out_pos = 0;
+        bool need_space = false;
 
         size_t i = start;
         while (i < end) {
-            if (i < end && data[i] == ' ') {
-                buffer[out_pos++] = ' ';
+            if (data[i] == ' ') {
+                if (out_pos > 0) {
+                    buffer[out_pos++] = ' ';
+                    need_space = false;
+                }
                 i++;
                 continue;
             }
 
-            bool is_escaped = (i < end && data[i] == escape_char);
+            bool is_escaped = (data[i] == escape_char);
             if (is_escaped) i++;
 
             size_t s = i;
@@ -275,25 +281,45 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
                     output_len = len;
                 }
 
+                if (need_space && out_pos > 0) {
+                    buffer[out_pos++] = ' ';
+                }
+
                 memcpy(&buffer[out_pos], output, output_len);
                 out_pos += output_len;
+                need_space = true;
                 free(token);
             }
         }
 
-        buffer[out_pos] = '\0';
+        // Remove trailing space if exists
+        if (out_pos > 0 && buffer[out_pos-1] == ' ') {
+            out_pos--;
+        }
+
         segments[tid] = buffer;
         seg_lens[tid] = out_pos;
+        seg_ends_with_space[tid] = (out_pos > 0 && buffer[out_pos-1] == ' ');
     }
 
+    // Combine segments with proper spacing
+    bool need_segment_space = false;
     for (int i = 0; i < threads; i++) {
+        if (seg_lens[i] == 0) continue;
+
+        if (need_segment_space) {
+            fputc(' ', out);
+        }
+
         fwrite(segments[i], 1, seg_lens[i], out);
+        need_segment_space = !seg_ends_with_space[i];
         free(segments[i]);
     }
 
     fclose(out);
     free(segments);
     free(seg_lens);
+    free(seg_ends_with_space);
     free_dictionary(dict, dict_size);
     free_hashmap(hashmap);
 }
