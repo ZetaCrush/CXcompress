@@ -73,8 +73,13 @@ DictEntry* load_dictionary(const char* dict_path, const char* lang_path, size_t*
 
         // Add to hashmap for O(1) lookup
         HashEntry* item = malloc(sizeof(HashEntry));
-        item->key = strdup(entries[i].word);
-        item->value = entries[i].symbol;
+        if (mode == 'c') {
+            item->key = strdup(entries[i].word);
+            item->value = entries[i].symbol;
+        } else {
+            item->key = strdup(entries[i].symbol);
+            item->value = entries[i].word;
+        }
         HASH_ADD_KEYPTR(hh, *hashmap, item->key, strlen(item->key), item);
 
         i++;
