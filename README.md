@@ -1,15 +1,20 @@
 # CXcompress
 CXcompress is a lossless text compressor with the vision of being the best open-source compressor on the internet
 
-This software is currently available as a python script; work is being done to port to C. This compression library is built on top of the very popular zstd created by Yann Collet.
+This compression library is built on top of the very popular zstd created by Yann Collet.
 
 # Usage
+### Compilation
+```
+gcc -O3 -march=native -flto -o CXcompress CXcompress.c
+```
+
 ### Compression
 ```
-python CXcompress.py -c --f <file_to_compress> --e <file_encoding> --l <zstd_compression_level> --dict <dictionary_file>
+./CXcompress -c dickens dict 0
 ```
 
 ### Decompression
 ```
-python CXcompress.py -d --f <file_to_decompress> --e <file_encoding_to_write_restored> --dict <dictionary_file>
+./CXcompress -d compressed dict 0
 ```
