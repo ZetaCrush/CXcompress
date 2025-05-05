@@ -1,6 +1,3 @@
-// Full corrected version of your compression/decompression tool
-// with token-level parallelism to fix symbol boundary issues.
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
