@@ -3,19 +3,19 @@ FlowerGunKing is a lossless text compressor with the vision of being the best op
 
 # Compile
 ```
-    gcc -o run flowergunking.c -lzstd
+    gcc -o flowergunking flowergunking.c -lzstd
 ```
 
 # Usage
 ```
-    ./run [-c|-d] <input_file> <output_file> [-dict dictionary_file]
+    ./flowergunking [-c|-d] <input_file> <output_file> [-dict dictionary_file]
 ```
 
 ### Compress
 ```
-    ./run -c dickens compressed -dict dict
+    ./flowergunking -c dickens compressed -dict dict
 ```
 ### De-Compress
 ```
-    ./run -d compressed dickens.restore -dict dict
+    ./flowergunking -d compressed dickens.restore -dict dict
 ```
