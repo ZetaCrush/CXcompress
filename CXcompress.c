@@ -29,14 +29,24 @@ void read_file(const char* path, const char* label) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 4) {
-        fprintf(stderr, "Usage: %s <file_path> <dictionary_file_path> <integer_arg>\n", argv[0]);
+    if (argc != 5) {
+        fprintf(stderr, "Usage: %s <-c|-d> <file_path> <dictionary_file_path> <language_file_path>\n", argv[0]);
         return 1;
     }
 
-    const char* file_path = argv[1];
-    const char* dict_path = argv[2];
-    const char* language_path = argv[3];
+    const char* mode_flag = argv[1];
+    const char* file_path = argv[2];
+    const char* dict_path = argv[3];
+    const char* language_path = argv[4];
+
+    if (strcmp(mode_flag, "-c") == 0) {
+        printf("Mode: Compression\n");
+    } else if (strcmp(mode_flag, "-d") == 0) {
+        printf("Mode: Decompression\n");
+    } else {
+        fprintf(stderr, "Invalid mode: %s. Use -c for compression or -d for decompression.\n", mode_flag);
+        return 1;
+    }
 
     read_file(file_path, "Input file");
     read_file(dict_path, "Dictionary");
