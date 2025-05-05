@@ -30,7 +30,7 @@ bool is_symbol_fast(const char* word, size_t len) {
     return symbol_lookup[a][b][c];
 }
 
-DictEntry* load_dictionary(const char* dict_path, const char* lang_path, size_t* count, HashEntry** hashmap) {
+DictEntry* load_dictionary(const char* dict_path, const char* lang_path, size_t* count, HashEntry** hashmap, const char mode) {
     FILE* dict_file = fopen(dict_path, "r");
     FILE* lang_file = fopen(lang_path, "r");
 
@@ -55,12 +55,21 @@ DictEntry* load_dictionary(const char* dict_path, const char* lang_path, size_t*
         entries[i].word = strdup(dict_line);
         entries[i].symbol = strdup(lang_line);
 
-        // Add to symbol lookup
-        size_t slen = strlen(entries[i].symbol);
-        unsigned char a = entries[i].symbol[0];
-        unsigned char b = (slen > 1) ? entries[i].symbol[1] : 0;
-        unsigned char c = (slen > 2) ? entries[i].symbol[2] : 0;
-        symbol_lookup[a][b][c] = true;
+        if (mode=='c') {
+            // Add to symbol lookup
+            size_t slen = strlen(entries[i].symbol);
+            unsigned char a = entries[i].symbol[0];
+            unsigned char b = (slen > 1) ? entries[i].symbol[1] : 0;
+            unsigned char c = (slen > 2) ? entries[i].symbol[2] : 0;
+            symbol_lookup[a][b][c] = true;
+        } else {
+            // Add to symbol lookup
+            size_t slen = strlen(entries[i].word);
+            unsigned char a = entries[i].word[0];
+            unsigned char b = (slen > 1) ? entries[i].word[1] : 0;
+            unsigned char c = (slen > 2) ? entries[i].word[2] : 0;
+            symbol_lookup[a][b][c] = true;
+        }
 
         // Add to hashmap for O(1) lookup
         HashEntry* item = malloc(sizeof(HashEntry));
@@ -111,7 +120,7 @@ char find_unused_char_from_buffer(const char* buffer, size_t len) {
 void compress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads) {
     size_t dict_size = 0;
     HashEntry* hashmap = NULL;
-    DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap);
+    DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap, 'c');
     char escape_char = find_unused_char_from_buffer(input_buffer, input_len);
 
     FILE* out = fopen("out", "wb");
@@ -189,7 +198,7 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
 void decompress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads) {
     size_t dict_size = 0;
     HashEntry* hashmap = NULL;
-    DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap);
+    DictEntry* dict = load_dictionary(lang_path, dict_path, &dict_size, &hashmap, 'd');
 
     char escape_char = input_buffer[0];
     const char* data = input_buffer + 1;
