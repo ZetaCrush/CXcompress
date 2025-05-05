@@ -10,8 +10,8 @@ from tqdm import tqdm
 SEP = {",", ".", ";", "?", "!", "\n", "-"}
 M = 252
 
-def compress(s,level):
-    most_common_words = open("dict").read().split("\n")
+def compress(s,level,dict_file):
+    most_common_words = open(dict_file).read().split("\n")
     mcws = set(most_common_words)
 
     # Use most common chars in text as symbols
@@ -191,7 +191,7 @@ def compress(s,level):
     return b'\x01'+zstd.compress(v.encode("utf-8", "replace"),level=level)
 
 
-def decompress(b):
+def decompress(b,dict_file):
     if b[0]!=0x01:
         return zstd.decompress(b).decode("utf-8","replace")
 
@@ -230,7 +230,7 @@ def decompress(b):
 
     # If Q == "1", reorder dictionary
     m = set(_map)  # not strictly needed, but used if debugging
-    most_common_words = open("dict").read().split("\n")
+    most_common_words = open(dict_file).read().split("\n")
     if Q == "1":
         # Rebuild the top M portion using the order in _map
         # _map holds characters that indicate the new order
@@ -321,6 +321,7 @@ if __name__ == "__main__":
     parser.add_argument("--f", help="File")
     parser.add_argument("--e", help="Encoding")
     parser.add_argument("--l", help="Compression Level",type=int,default=22)
+    parser.add_argument("--dict",help="Dictionary",default="dict")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("-c", action="store_true", help="Compress mode")
     mode.add_argument("-d", action="store_true", help="Decompress mode")
@@ -331,11 +332,11 @@ if __name__ == "__main__":
 
     if args.c:
         s = open(args.f, encoding=args.e).read()
-        b = compress(s,args.l)
+        b = compress(s,args.l,args.dict)
         with open("compressed", "wb") as f:
             f.write(b)
     else:
         s = open(args.f, "rb").read()
-        _s = decompress(s)
+        _s = decompress(s,args.dict)
         with open("orig", "w", encoding=args.e) as f:
             f.write(_s)
