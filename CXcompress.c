@@ -1,3 +1,6 @@
+// Full corrected version of your compression/decompression tool
+// with token-level parallelism to fix symbol boundary issues.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -134,19 +137,53 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap, 'c');
     char escape_char = find_unused_char_from_buffer(input_buffer, input_len);
 
-    Token* tokens = malloc(sizeof(Token) * (input_len / 2));
+    // First pass to count tokens and spaces
     size_t token_count = 0;
-    size_t i = 0;
-
-    while (i < input_len) {
-        size_t start = i;
-        while (i < input_len && input_buffer[i] != ' ') i++;
-        size_t len = i - start;
-        if (len > 0) {
-            bool escaped = is_symbol_fast(&input_buffer[start], len);
-            tokens[token_count++] = (Token){ .start = &input_buffer[start], .len = len, .escaped = escaped };
+    size_t space_count = 0;
+    bool in_space = false;
+    for (size_t i = 0; i < input_len; i++) {
+        if (input_buffer[i] == ' ') {
+            if (!in_space) {
+                space_count++;
+                in_space = true;
+            }
+        } else {
+            if (in_space || i == 0) {
+                token_count++;
+            }
+            in_space = false;
         }
-        if (i < input_len && input_buffer[i] == ' ') i++;
+    }
+
+    Token* tokens = malloc(sizeof(Token) * token_count);
+    size_t* spaces_before = calloc(token_count, sizeof(size_t));
+    size_t current_token = 0;
+    in_space = false;
+    size_t current_spaces = 0;
+
+    // Second pass to record tokens and spaces
+    for (size_t i = 0; i < input_len; ) {
+        if (input_buffer[i] == ' ') {
+            current_spaces++;
+            i++;
+            in_space = true;
+            continue;
+        }
+
+        if (in_space || current_token == 0) {
+            if (current_token > 0) {
+                spaces_before[current_token] = current_spaces;
+            }
+            current_spaces = 0;
+
+            size_t start = i;
+            while (i < input_len && input_buffer[i] != ' ') i++;
+            size_t len = i - start;
+
+            bool escaped = is_symbol_fast(&input_buffer[start], len);
+            tokens[current_token++] = (Token){ .start = &input_buffer[start], .len = len, .escaped = escaped };
+            in_space = false;
+        }
     }
 
     FILE* out = fopen("out", "wb");
@@ -159,13 +196,20 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
         int tid = omp_get_thread_num();
         size_t start = (token_count * tid) / threads;
         size_t end = (token_count * (tid + 1)) / threads;
-        char* buffer = malloc((end - start) * 16);
+        char* buffer = malloc((end - start) * 16 + input_len); // Extra space for worst case
         size_t out_pos = 0;
 
         for (size_t j = start; j < end; j++) {
+            // Add spaces before token
+            for (size_t s = 0; s < spaces_before[j]; s++) {
+                buffer[out_pos++] = ' ';
+            }
+
+            // Add the token itself
             Token tok = tokens[j];
             char temp[256];
-            memcpy(temp, tok.start, tok.len); temp[tok.len] = '\0';
+            memcpy(temp, tok.start, tok.len);
+            temp[tok.len] = '\0';
             HashEntry* found = NULL;
             HASH_FIND_STR(hashmap, temp, found);
             if (found) {
@@ -180,7 +224,6 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
                 memcpy(&buffer[out_pos], tok.start, tok.len);
                 out_pos += tok.len;
             }
-            buffer[out_pos++] = ' ';
         }
         segments[tid] = buffer;
         seg_lens[tid] = out_pos;
@@ -191,11 +234,21 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
         free(segments[i]);
     }
     fclose(out);
-    free(segments); free(seg_lens); free(tokens);
-    for (size_t i = 0; i < dict_size; i++) { free(dict[i].word); free(dict[i].symbol); }
+    free(segments);
+    free(seg_lens);
+    free(tokens);
+    free(spaces_before);
+    for (size_t i = 0; i < dict_size; i++) {
+        free(dict[i].word);
+        free(dict[i].symbol);
+    }
     free(dict);
     HashEntry *cur, *tmp;
-    HASH_ITER(hh, hashmap, cur, tmp) { HASH_DEL(hashmap, cur); free(cur->key); free(cur); }
+    HASH_ITER(hh, hashmap, cur, tmp) {
+        HASH_DEL(hashmap, cur);
+        free(cur->key);
+        free(cur);
+    }
 }
 
 void decompress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads) {
@@ -214,6 +267,24 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
     const char* data = input_buffer + 1;
     size_t data_len = input_len - 1;
 
+    // First pass to count tokens and spaces
+    size_t token_count = 0;
+    size_t space_count = 0;
+    bool in_space = false;
+    for (size_t i = 0; i < data_len; i++) {
+        if (data[i] == ' ') {
+            if (!in_space) {
+                space_count++;
+                in_space = true;
+            }
+        } else {
+            if (in_space || i == 0) {
+                token_count++;
+            }
+            in_space = false;
+        }
+    }
+
     FILE* out = fopen("out_decompressed", "wb");
     if (!out) {
         fprintf(stderr, "Failed to open decompressed output file\n");
@@ -224,7 +295,7 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
 
     char** segments = malloc(sizeof(char*) * threads);
     size_t* seg_lens = calloc(threads, sizeof(size_t));
-    bool* seg_ends_with_space = calloc(threads, sizeof(bool));
+    size_t* seg_space_counts = calloc(threads, sizeof(size_t));
 
     #pragma omp parallel num_threads(threads)
     {
@@ -236,21 +307,24 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
         while (start > 0 && data[start] != ' ') start++;
         while (end < data_len && data[end] != ' ') end++;
 
-        char* buffer = malloc((end - start + 1) * 8);
+        char* buffer = malloc((end - start + 1) * 8 + data_len); // Extra space for worst case
         size_t out_pos = 0;
-        bool need_space = false;
+        size_t space_count = 0;
+        bool in_space = false;
 
-        size_t i = start;
-        while (i < end) {
+        for (size_t i = start; i < end; ) {
             if (data[i] == ' ') {
-                if (out_pos > 0) {
-                    buffer[out_pos++] = ' ';
-                    need_space = false;
+                if (!in_space) {
+                    space_count = 0;
+                    in_space = true;
                 }
+                space_count++;
+                buffer[out_pos++] = ' ';
                 i++;
                 continue;
             }
 
+            in_space = false;
             bool is_escaped = (data[i] == escape_char);
             if (is_escaped) i++;
 
@@ -278,45 +352,27 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
                     output_len = len;
                 }
 
-                if (need_space && out_pos > 0) {
-                    buffer[out_pos++] = ' ';
-                }
-
                 memcpy(&buffer[out_pos], output, output_len);
                 out_pos += output_len;
-                need_space = true;
                 free(token);
             }
         }
 
-        // Remove trailing space if exists
-        if (out_pos > 0 && buffer[out_pos-1] == ' ') {
-            out_pos--;
-        }
-
         segments[tid] = buffer;
         seg_lens[tid] = out_pos;
-        seg_ends_with_space[tid] = (out_pos > 0 && buffer[out_pos-1] == ' ');
+        seg_space_counts[tid] = space_count;
     }
 
-    // Combine segments with proper spacing
-    bool need_segment_space = false;
+    // Combine segments
     for (int i = 0; i < threads; i++) {
-        if (seg_lens[i] == 0) continue;
-
-        if (need_segment_space) {
-            fputc(' ', out);
-        }
-
         fwrite(segments[i], 1, seg_lens[i], out);
-        need_segment_space = !seg_ends_with_space[i];
         free(segments[i]);
     }
 
     fclose(out);
     free(segments);
     free(seg_lens);
-    free(seg_ends_with_space);
+    free(seg_space_counts);
     free_dictionary(dict, dict_size);
     free_hashmap(hashmap);
 }
