@@ -18,3 +18,9 @@ gcc-14 -O3 -march=native -flto -fopenmp -o CXcompress CXcompress.c
 ```
 ./CXcompress -d <compressed_file> <dictionary_file> <language_pack_int> <num_threads>
 ```
+
+## Notes
+To check how many threads are available on your machine, run this command:
+```
+sysctl -n hw.logicalcpu
+```
