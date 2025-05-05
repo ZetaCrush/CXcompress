@@ -11,10 +11,10 @@ gcc-14 -O3 -march=native -flto -fopenmp -o CXcompress CXcompress.c
 
 ### Compression
 ```
-./CXcompress -c dickens dict 0
+./CXcompress -c <input_file> <dictionary_file> <language_pack_int> <num_threads>
 ```
 
 ### Decompression
 ```
-./CXcompress -d compressed dict 0
+./CXcompress -d <compressed_file> <dictionary_file> <language_pack_int> <num_threads>
 ```
