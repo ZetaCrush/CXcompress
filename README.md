@@ -3,7 +3,7 @@ CXcompress is a lossless text compressor with the vision of being the best open-
 
 This compression library is built on top of the very popular zstd created by Yann Collet.
 
-# Usage
+# Usage (supports MacOS/Linux)
 ### Compilation
 ```
 gcc -O3 -march=native -flto -o CXcompress CXcompress.c
