@@ -1,7 +1,7 @@
 # CXcompress
 CXcompress is a lossless text compressor with the vision of being the best open-source compressor on the internet
 
-This compression library is built on top of the very popular zstd created by Yann Collet.
+This compression library is built on top of the very popular zstd created by Yann Collet at Meta.
 
 # Usage (supports MacOS/Linux)
 ### Compilation
