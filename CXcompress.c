@@ -36,12 +36,11 @@ int main(int argc, char* argv[]) {
 
     const char* file_path = argv[1];
     const char* dict_path = argv[2];
-    int int_arg = atoi(argv[3]);
-
-    printf("Integer arg: %d\n", int_arg);
+    const char* language_path = argv[3];
 
     read_file(file_path, "Input file");
     read_file(dict_path, "Dictionary");
+    read_file(language_path, "Language pack");
 
     return 0;
 }
