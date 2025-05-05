@@ -190,8 +190,81 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
     size_t dict_size = 0;
     HashEntry* hashmap = NULL;
     DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap);
+
     char escape_char = input_buffer[0];
-    // Your decompression logic here
+    const char* data = input_buffer + 1;
+    size_t data_len = input_len - 1;
+
+    FILE* out = fopen("out_decompressed", "wb");
+    if (!out) {
+        fprintf(stderr, "Failed to open decompressed output file\n");
+        exit(1);
+    }
+
+    char** segments = malloc(sizeof(char*) * threads);
+    size_t* seg_lens = calloc(threads, sizeof(size_t));
+
+    #pragma omp parallel num_threads(threads)
+    {
+        int tid = omp_get_thread_num();
+        size_t start = (data_len * tid) / threads;
+        size_t end = (data_len * (tid + 1)) / threads;
+
+        // Align to word boundary
+        while (start > 0 && data[start] != ' ') start++;
+        while (end < data_len && data[end] != ' ') end++;
+
+        char* buffer = malloc((end - start) * 8); // generous allocation for word expansion
+        size_t out_pos = 0;
+
+        size_t i = start;
+        while (i < end) {
+            bool is_escaped = (data[i] == escape_char);
+            if (is_escaped) i++;
+
+            size_t s = i;
+            while (i < end && data[i] != ' ') i++;
+            size_t len = i - s;
+
+            if (len > 0) {
+                char backup = data[i];
+                ((char*)data)[i] = '\0';
+                if (!is_escaped) {
+                    HashEntry* found = NULL;
+                    HASH_FIND_STR(hashmap, &data[s], found);
+                    if (found) {
+                        size_t word_len = strlen(found->key);
+                        memcpy(&buffer[out_pos], found->key, word_len);
+                        out_pos += word_len;
+                    } else {
+                        memcpy(&buffer[out_pos], &data[s], len);
+                        out_pos += len;
+                    }
+                } else {
+                    memcpy(&buffer[out_pos], &data[s], len);
+                    out_pos += len;
+                }
+                ((char*)data)[i] = backup;
+            }
+
+            if (i < end && data[i] == ' ') {
+                buffer[out_pos++] = ' ';
+                i++;
+            }
+        }
+
+        segments[tid] = buffer;
+        seg_lens[tid] = out_pos;
+    }
+
+    for (int i = 0; i < threads; i++) {
+        fwrite(segments[i], 1, seg_lens[i], out);
+        free(segments[i]);
+    }
+
+    fclose(out);
+    free(segments);
+    free(seg_lens);
     free_dictionary(dict, dict_size);
     free_hashmap(hashmap);
 }
