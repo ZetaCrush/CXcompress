@@ -11,5 +11,5 @@ python flowergunking.py -c --f <file_to_compress> --e <file_encoding> --l <zstd_
 
 ### Decompression
 ```
-python flowergunking.py -d --f <file_to_decompress> --e <file_encoding> --dict <dictionary_file>
+python flowergunking.py -d --f <file_to_decompress> --e <file_encoding_to_write_restored> --dict <dictionary_file>
 ```
