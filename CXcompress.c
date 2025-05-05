@@ -247,9 +247,10 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
                     HashEntry* found = NULL;
                     HASH_FIND_STR(hashmap, &data[s], found);
                     if (found) {
-                        size_t word_len = strlen(found->key);
-                        memcpy(&buffer[out_pos], found->key, word_len);
+                        size_t word_len = strlen(found->value);
+                        memcpy(&buffer[out_pos], found->value, word_len);
                         out_pos += word_len;
+
                     } else {
                         memcpy(&buffer[out_pos], &data[s], len);
                         out_pos += len;
