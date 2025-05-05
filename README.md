@@ -6,7 +6,7 @@ This compression library is built to be used on top of the very popular zstd cre
 # Usage (supports MacOS/Linux)
 ### Compilation
 ```
-gcc -O3 -march=native -flto -o CXcompress CXcompress.c
+gcc -O3 -march=native -flto -fopenmp -o CXcompress CXcompress.c
 ```
 
 ### Compression
