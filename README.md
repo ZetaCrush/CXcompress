@@ -6,10 +6,10 @@ This software is currently available as a standalone python script; work is bein
 # Usage
 ### Compression
 ```
-python flowergunking.py -c --f <file_to_compress> --e <file_encoding> --l <zstd_compression_level>
+python flowergunking.py -c --f <file_to_compress> --e <file_encoding> --l <zstd_compression_level> --dict <dictionary_file>
 ```
 
 ### Decompression
 ```
-python flowergunking.py -d --f <file_to_decompress> --e <file_encoding>
+python flowergunking.py -d --f <file_to_decompress> --e <file_encoding> --dict <dictionary_file>
 ```
