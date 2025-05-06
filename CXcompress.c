@@ -1,4 +1,3 @@
-// Includes and Definitions
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +11,6 @@
 
 bool symbol_lookup[256][256][256] = {{{ false }}};
 
-// Structs
 typedef struct {
     char* word;
     char* symbol;
@@ -30,7 +28,6 @@ typedef struct {
     bool escaped;
 } Token;
 
-// Utility Functions
 bool is_symbol_fast(const char* word, size_t len) {
     if (len == 0 || len > 3) return false;
     unsigned char a = word[0];
@@ -42,19 +39,28 @@ bool is_symbol_fast(const char* word, size_t len) {
 DictEntry* load_dictionary(const char* dict_path, const char* lang_path, size_t* count, HashEntry** hashmap, const char mode) {
     FILE* dict_file = fopen(dict_path, "r");
     FILE* lang_file = fopen(lang_path, "r");
+
     if (!dict_file || !lang_file) {
         fprintf(stderr, "Failed to open dictionary (%s) or language file (%s)\n", dict_path, lang_path);
         exit(1);
     }
 
     DictEntry* entries = malloc(sizeof(DictEntry) * MAX_ENTRIES);
-    char dict_line[MAX_LINE], lang_line[MAX_LINE];
+    if (!entries) {
+        fprintf(stderr, "Memory allocation failed for dictionary\n");
+        exit(1);
+    }
+
+    char dict_line[MAX_LINE];
+    char lang_line[MAX_LINE];
     size_t i = 0;
 
     while (fgets(dict_line, MAX_LINE, dict_file) && fgets(lang_line, MAX_LINE, lang_file)) {
         dict_line[strcspn(dict_line, "\n")] = 0;
         lang_line[strcspn(lang_line, "\n")] = 0;
-        if (strlen(dict_line) == 0 || strlen(lang_line) == 0) continue;
+        if (strlen(dict_line) == 0 || strlen(lang_line) == 0) {
+            continue;
+        }
 
         entries[i].word = strdup(dict_line);
         entries[i].symbol = strdup(lang_line);
@@ -77,8 +83,10 @@ DictEntry* load_dictionary(const char* dict_path, const char* lang_path, size_t*
         HASH_ADD_KEYPTR(hh, *hashmap, item->key, strlen(item->key), item);
         i++;
     }
+
     fclose(dict_file);
     fclose(lang_file);
+
     *count = i;
     return entries;
 }
@@ -92,7 +100,8 @@ void free_dictionary(DictEntry* entries, size_t count) {
 }
 
 void free_hashmap(HashEntry* hashmap) {
-    HashEntry* current; HashEntry* tmp;
+    HashEntry* current;
+    HashEntry* tmp;
     HASH_ITER(hh, hashmap, current, tmp) {
         HASH_DEL(hashmap, current);
         free(current->key);
@@ -101,7 +110,8 @@ void free_hashmap(HashEntry* hashmap) {
 }
 
 char find_unused_char_from_buffer(const char* buffer, size_t len) {
-    bool used[256] = {0}; used[0] = true;
+    bool used[256] = {0};
+    used[0] = true;
     for (size_t i = 0; i < len; i++) used[(unsigned char)buffer[i]] = true;
     for (int i = 0; i < 256; i++) if (!used[i]) return (char)i;
     fprintf(stderr, "No escape character available\n"); exit(1);
@@ -113,50 +123,83 @@ char* read_file(const char* path, const char* label, size_t* out_len) {
     fseek(file, 0, SEEK_END); long length = ftell(file); rewind(file);
     char* buffer = malloc(length + 1);
     size_t read = fread(buffer, 1, length, file);
-    buffer[read] = '\0'; fclose(file);
+    buffer[read] = '\0';
+    fclose(file);
     if (out_len) *out_len = read;
     return buffer;
 }
 
-// Updated compression function to support 4-byte space counts
 void compress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads) {
     size_t dict_size = 0;
     HashEntry* hashmap = NULL;
     DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap, 'c');
     char escape_char = find_unused_char_from_buffer(input_buffer, input_len);
 
-    size_t token_count = 0, leading_spaces = 0, trailing_spaces = 0;
-    for (size_t i = 0; i < input_len && input_buffer[i] == ' '; i++) leading_spaces++;
-    for (size_t i = input_len; i > 0 && input_buffer[i - 1] == ' '; i--) trailing_spaces++;
-
+    // Count tokens, spaces, leading spaces, and trailing spaces
+    size_t token_count = 0;
+    size_t space_count = 0;
+    size_t leading_spaces = 0;
+    size_t trailing_spaces = 0;
     bool in_space = false;
-    for (size_t i = leading_spaces; i < input_len - trailing_spaces; i++) {
+
+    // Count leading spaces
+    for (size_t i = 0; i < input_len && input_buffer[i] == ' '; i++) {
+        leading_spaces++;
+    }
+    if (leading_spaces > 255) {
+        fprintf(stderr, "Too many leading spaces (%zu), max 255 supported\n", leading_spaces);
+        exit(1);
+    }
+
+    // Count tokens and spaces (excluding leading spaces)
+    for (size_t i = leading_spaces; i < input_len; i++) {
         if (input_buffer[i] == ' ') {
-            in_space = true;
+            if (!in_space) {
+                space_count++;
+                in_space = true;
+            }
         } else {
-            if (in_space || i == leading_spaces) token_count++;
+            if (in_space || i == leading_spaces) {
+                token_count++;
+            }
             in_space = false;
         }
     }
 
+    // Count trailing spaces
+    for (size_t i = input_len; i > 0 && input_buffer[i - 1] == ' '; i--) {
+        trailing_spaces++;
+    }
+    if (trailing_spaces > 255) {
+        fprintf(stderr, "Too many trailing spaces (%zu), max 255 supported\n", trailing_spaces);
+        exit(1);
+    }
+
     Token* tokens = malloc(sizeof(Token) * token_count);
     size_t* spaces_before = calloc(token_count, sizeof(size_t));
-    size_t current_token = 0, current_spaces = 0;
+    size_t current_token = 0;
     in_space = false;
+    size_t current_spaces = 0;
 
-    for (size_t i = leading_spaces; i < input_len - trailing_spaces;) {
+    // Record tokens and spaces (starting after leading spaces)
+    for (size_t i = leading_spaces; i < input_len; ) {
         if (input_buffer[i] == ' ') {
             current_spaces++;
             i++;
             in_space = true;
             continue;
         }
+
         if (in_space || current_token == 0) {
-            if (current_token > 0) spaces_before[current_token] = current_spaces;
+            if (current_token > 0) {
+                spaces_before[current_token] = current_spaces;
+            }
             current_spaces = 0;
+
             size_t start = i;
-            while (i < input_len - trailing_spaces && input_buffer[i] != ' ') i++;
+            while (i < input_len && input_buffer[i] != ' ') i++;
             size_t len = i - start;
+
             bool escaped = is_symbol_fast(&input_buffer[start], len);
             tokens[current_token++] = (Token){ .start = &input_buffer[start], .len = len, .escaped = escaped };
             in_space = false;
@@ -164,9 +207,9 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     }
 
     FILE* out = fopen("out", "wb");
-    fwrite(&escape_char, 1, 1, out);
-    fwrite(&leading_spaces, sizeof(uint32_t), 1, out);
-    fwrite(&trailing_spaces, sizeof(uint32_t), 1, out);
+    fputc(escape_char, out);
+    fputc((unsigned char)leading_spaces, out); // Write leading spaces count
+    fputc((unsigned char)trailing_spaces, out); // Write trailing spaces count
 
     char** segments = malloc(sizeof(char*) * threads);
     size_t* seg_lens = calloc(threads, sizeof(size_t));
@@ -180,10 +223,14 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
         size_t out_pos = 0;
 
         for (size_t j = start; j < end; j++) {
-            for (size_t s = 0; s < spaces_before[j]; s++) buffer[out_pos++] = ' ';
+            for (size_t s = 0; s < spaces_before[j]; s++) {
+                buffer[out_pos++] = ' ';
+            }
+
             Token tok = tokens[j];
             char temp[256];
-            memcpy(temp, tok.start, tok.len); temp[tok.len] = '\0';
+            memcpy(temp, tok.start, tok.len);
+            temp[tok.len] = '\0';
             HashEntry* found = NULL;
             HASH_FIND_STR(hashmap, temp, found);
             if (found) {
@@ -208,7 +255,10 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
         free(segments[i]);
     }
     fclose(out);
-    free(segments); free(seg_lens); free(tokens); free(spaces_before);
+    free(segments);
+    free(seg_lens);
+    free(tokens);
+    free(spaces_before);
     free_dictionary(dict, dict_size);
     free_hashmap(hashmap);
 }
@@ -218,22 +268,134 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
     HashEntry* hashmap = NULL;
     DictEntry* dict = load_dictionary(lang_path, dict_path, &dict_size, &hashmap, 'd');
 
-    if (input_len < 9) { fprintf(stderr, "Invalid input file\n"); return; }
+    if (input_len < 3) {
+        fprintf(stderr, "Invalid input file: too short\n");
+        free_dictionary(dict, dict_size);
+        free_hashmap(hashmap);
+        return;
+    }
 
     char escape_char = input_buffer[0];
-    uint32_t leading_spaces, trailing_spaces;
-    memcpy(&leading_spaces, input_buffer + 1, sizeof(uint32_t));
-    memcpy(&trailing_spaces, input_buffer + 5, sizeof(uint32_t));
-    const char* data = input_buffer + 9;
-    size_t data_len = input_len - 9;
+    unsigned char leading_spaces = (unsigned char)input_buffer[1];
+    unsigned char trailing_spaces = (unsigned char)input_buffer[2];
+    const char* data = input_buffer + 3;
+    size_t data_len = input_len - 3;
+
+    // Count tokens and spaces
+    size_t token_count = 0;
+    size_t space_count = 0;
+    bool in_space = false;
+    for (size_t i = 0; i < data_len; i++) {
+        if (data[i] == ' ') {
+            if (!in_space) {
+                space_count++;
+                in_space = true;
+            }
+        } else {
+            if (in_space || i == 0) {
+                token_count++;
+            }
+            in_space = false;
+        }
+    }
 
     FILE* out = fopen("out_decompressed", "wb");
-    for (uint32_t i = 0; i < leading_spaces; i++) fputc(' ', out);
+    if (!out) {
+        fprintf(stderr, "Failed to open decompressed output file\n");
+        free_dictionary(dict, dict_size);
+        free_hashmap(hashmap);
+        exit(1);
+    }
 
-    fwrite(data, 1, data_len, out);
+    // Write leading spaces
+    for (size_t i = 0; i < leading_spaces; i++) {
+        fputc(' ', out);
+    }
 
-    for (uint32_t i = 0; i < trailing_spaces; i++) fputc(' ', out);
+    char** segments = malloc(sizeof(char*) * threads);
+    size_t* seg_lens = calloc(threads, sizeof(size_t));
+    size_t* seg_space_counts = calloc(threads, sizeof(size_t));
+
+    #pragma omp parallel num_threads(threads)
+    {
+        int tid = omp_get_thread_num();
+        size_t start = (data_len * tid) / threads;
+        size_t end = (data_len * (tid + 1)) / threads;
+
+        while (start > 0 && data[start] != ' ') start++;
+        while (end < data_len && data[end] != ' ') end++;
+
+        char* buffer = malloc((end - start + 1) * 8 + data_len);
+        size_t out_pos = 0;
+        size_t space_count = 0;
+        bool in_space = false;
+
+        for (size_t i = start; i < end; ) {
+            if (data[i] == ' ') {
+                if (!in_space) {
+                    space_count = 0;
+                    in_space = true;
+                }
+                space_count++;
+                buffer[out_pos++] = ' ';
+                i++;
+                continue;
+            }
+
+            in_space = false;
+            bool is_escaped = (data[i] == escape_char);
+            if (is_escaped) i++;
+
+            size_t s = i;
+            while (i < end && data[i] != ' ') i++;
+            size_t len = i - s;
+
+            if (len > 0) {
+                char* token = strndup(&data[s], len);
+                char* output = NULL;
+                size_t output_len = 0;
+
+                if (!is_escaped) {
+                    HashEntry* found = NULL;
+                    HASH_FIND_STR(hashmap, token, found);
+                    if (found) {
+                        output = found->value;
+                        output_len = strlen(output);
+                    } else {
+                        output = token;
+                        output_len = len;
+                    }
+                } else {
+                    output = token;
+                    output_len = len;
+                }
+
+                memcpy(&buffer[out_pos], output, output_len);
+                out_pos += output_len;
+                free(token);
+            }
+        }
+
+        segments[tid] = buffer;
+        seg_lens[tid] = out_pos;
+        seg_space_counts[tid] = space_count;
+    }
+
+    // Write segments
+    for (int i = 0; i < threads; i++) {
+        fwrite(segments[i], 1, seg_lens[i], out);
+        free(segments[i]);
+    }
+
+    // Append trailing spaces
+    for (size_t i = 0; i < trailing_spaces; i++) {
+        fputc(' ', out);
+    }
+
     fclose(out);
+    free(segments);
+    free(seg_lens);
+    free(seg_space_counts);
     free_dictionary(dict, dict_size);
     free_hashmap(hashmap);
 }
