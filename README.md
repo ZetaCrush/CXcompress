@@ -13,6 +13,7 @@ gcc-14 -O3 -march=native -flto -fopenmp -o CXcompress CXcompress.c
 ```
 ./CXcompress -c <input_file> <dictionary_file> <language_pack_int> <num_threads>
 ```
+You can use the "dict" file as a prebuilt English dictionary and the prebuilt "0" language pack
 
 ### Decompression
 ```
@@ -28,4 +29,5 @@ The runtime of the compressor will be slower only the first time you run it; aft
 
 ## TODO
 1. Add OpenCL support for massively parallel operation with GPUs
-2. Algorithmic development
+2. More prebuilt dictionaries and language packs
+3. Algorithmic development
