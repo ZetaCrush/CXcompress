@@ -13,7 +13,7 @@ gcc-14 -O3 -march=native -flto -fopenmp -o CXcompress CXcompress.c
 ```
 ./CXcompress -c <input_file> <dictionary_file> <language_pack_int> <num_threads>
 ```
-You can use the "dict" file as a prebuilt English dictionary and the prebuilt "0" language pack
+You can use the "dict" file as a prebuilt English dictionary and the prebuilt "0" English language pack
 
 ### Decompression
 ```
