@@ -146,10 +146,6 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     for (size_t i = 0; i < input_len && input_buffer[i] == ' '; i++) {
         leading_spaces++;
     }
-    if (leading_spaces > 255) {
-        fprintf(stderr, "Too many leading spaces (%zu), max 255 supported\n", leading_spaces);
-        exit(1);
-    }
 
     // Count tokens and spaces (excluding leading spaces)
     for (size_t i = leading_spaces; i < input_len; i++) {
@@ -169,10 +165,6 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     // Count trailing spaces
     for (size_t i = input_len; i > 0 && input_buffer[i - 1] == ' '; i--) {
         trailing_spaces++;
-    }
-    if (trailing_spaces > 255) {
-        fprintf(stderr, "Too many trailing spaces (%zu), max 255 supported\n", trailing_spaces);
-        exit(1);
     }
 
     Token* tokens = malloc(sizeof(Token) * token_count);
