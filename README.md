@@ -24,3 +24,7 @@ To check how many threads are available on your machine, run this command:
 ```
 sysctl -n hw.logicalcpu
 ```
+
+## TODO
+1. Add OpenCL support for massively parallel operation with GPUs
+2. Algorithmic development
