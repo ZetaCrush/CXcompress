@@ -35,7 +35,12 @@ typedef struct {
 } TokenSpan;
 
 TokenSpan* tokenize(const char* input, size_t len, size_t* token_count_out) {
-    TokenSpan* spans = malloc(sizeof(TokenSpan) * (len / 2 + 1));
+    TokenSpan* spans = malloc(sizeof(TokenSpan) * (len + 1));
+    if (!spans) {
+        fprintf(stderr, "Memory allocation failed for tokenization\n");
+        exit(1);
+    }
+
     size_t i = 0, count = 0;
 
     while (i < len) {
@@ -179,7 +184,7 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
         size_t end_idx = (tid + 1) * tokens_per_thread;
         if (end_idx > token_count) end_idx = token_count;
 
-        char* buffer = malloc(input_len * 2 + 1024);
+        char* buffer = malloc(input_len * 4 + 1024);
         size_t out_pos = 0;
 
         for (size_t i = start_idx; i < end_idx; i++) {
@@ -190,7 +195,11 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
                 memcpy(&buffer[out_pos], ptr, tok.len);
                 out_pos += tok.len;
             } else {
-                char temp[256];
+                char* temp = malloc(tok.len + 1);
+                if (!temp) {
+                    fprintf(stderr, "Memory allocation failed\n");
+                    exit(1);
+                }
                 memcpy(temp, ptr, tok.len);
                 temp[tok.len] = '\0';
 
@@ -210,6 +219,7 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
                     memcpy(&buffer[out_pos], temp, tok.len);
                     out_pos += tok.len;
                 }
+                free(temp);
             }
         }
 
