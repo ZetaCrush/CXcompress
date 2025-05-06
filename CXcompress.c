@@ -284,7 +284,11 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
                 const char* actual = ptr + (is_escaped ? 1 : 0);
                 size_t len = tok.len - (is_escaped ? 1 : 0);
 
-                char temp[256];
+                char* temp = malloc(tok.len + 1);
+                if (!temp) {
+                    fprintf(stderr, "Memory allocation failed\n");
+                    exit(1);
+                }
                 memcpy(temp, actual, len);
                 temp[len] = '\0';
 
@@ -301,6 +305,7 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
 
                 memcpy(&buffer[out_pos], actual, len);
                 out_pos += len;
+                free(temp);
             }
         }
 
