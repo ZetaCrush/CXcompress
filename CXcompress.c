@@ -121,11 +121,11 @@ char* read_file(const char* path, const char* label, size_t* out_len) {
     FILE* file = fopen(path, "rb");
     if (!file) { fprintf(stderr, "Failed to open %s file: %s\n", label, path); exit(1); }
     fseek(file, 0, SEEK_END); long length = ftell(file); rewind(file);
-    char* buffer = malloc(length + 1); // +1 for null terminator
+    char* buffer = malloc(length + 1);
     size_t read = fread(buffer, 1, length, file);
-    buffer[read] = '\0'; // Null-terminate for safety
+    buffer[read] = '\0';
     fclose(file);
-    if (out_len) *out_len = read; // Return actual bytes read
+    if (out_len) *out_len = read;
     return buffer;
 }
 
@@ -135,19 +135,31 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap, 'c');
     char escape_char = find_unused_char_from_buffer(input_buffer, input_len);
 
-    // Count tokens, spaces, and trailing spaces
+    // Count tokens, spaces, leading spaces, and trailing spaces
     size_t token_count = 0;
     size_t space_count = 0;
+    size_t leading_spaces = 0;
     size_t trailing_spaces = 0;
     bool in_space = false;
-    for (size_t i = 0; i < input_len; i++) {
+
+    // Count leading spaces
+    for (size_t i = 0; i < input_len && input_buffer[i] == ' '; i++) {
+        leading_spaces++;
+    }
+    if (leading_spaces > 255) {
+        fprintf(stderr, "Too many leading spaces (%zu), max 255 supported\n", leading_spaces);
+        exit(1);
+    }
+
+    // Count tokens and spaces (excluding leading spaces)
+    for (size_t i = leading_spaces; i < input_len; i++) {
         if (input_buffer[i] == ' ') {
             if (!in_space) {
                 space_count++;
                 in_space = true;
             }
         } else {
-            if (in_space || i == 0) {
+            if (in_space || i == leading_spaces) {
                 token_count++;
             }
             in_space = false;
@@ -169,8 +181,8 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     in_space = false;
     size_t current_spaces = 0;
 
-    // Record tokens and spaces
-    for (size_t i = 0; i < input_len; ) {
+    // Record tokens and spaces (starting after leading spaces)
+    for (size_t i = leading_spaces; i < input_len; ) {
         if (input_buffer[i] == ' ') {
             current_spaces++;
             i++;
@@ -196,6 +208,7 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
 
     FILE* out = fopen("out", "wb");
     fputc(escape_char, out);
+    fputc((unsigned char)leading_spaces, out); // Write leading spaces count
     fputc((unsigned char)trailing_spaces, out); // Write trailing spaces count
 
     char** segments = malloc(sizeof(char*) * threads);
@@ -255,7 +268,7 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
     HashEntry* hashmap = NULL;
     DictEntry* dict = load_dictionary(lang_path, dict_path, &dict_size, &hashmap, 'd');
 
-    if (input_len < 2) {
+    if (input_len < 3) {
         fprintf(stderr, "Invalid input file: too short\n");
         free_dictionary(dict, dict_size);
         free_hashmap(hashmap);
@@ -263,9 +276,10 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
     }
 
     char escape_char = input_buffer[0];
-    unsigned char trailing_spaces = (unsigned char)input_buffer[1];
-    const char* data = input_buffer + 2;
-    size_t data_len = input_len - 2;
+    unsigned char leading_spaces = (unsigned char)input_buffer[1];
+    unsigned char trailing_spaces = (unsigned char)input_buffer[2];
+    const char* data = input_buffer + 3;
+    size_t data_len = input_len - 3;
 
     // Count tokens and spaces
     size_t token_count = 0;
@@ -291,6 +305,11 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
         free_dictionary(dict, dict_size);
         free_hashmap(hashmap);
         exit(1);
+    }
+
+    // Write leading spaces
+    for (size_t i = 0; i < leading_spaces; i++) {
+        fputc(' ', out);
     }
 
     char** segments = malloc(sizeof(char*) * threads);
