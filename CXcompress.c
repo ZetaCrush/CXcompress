@@ -55,7 +55,6 @@ DictEntry* load_dictionary(const char* dict_path, const char* lang_path, size_t*
     char lang_line[MAX_LINE];
     size_t i = 0;
 
-
     while (fgets(dict_line, MAX_LINE, dict_file) && fgets(lang_line, MAX_LINE, lang_file)) {
         dict_line[strcspn(dict_line, "\n")] = 0;
         lang_line[strcspn(lang_line, "\n")] = 0;
@@ -122,9 +121,11 @@ char* read_file(const char* path, const char* label, size_t* out_len) {
     FILE* file = fopen(path, "rb");
     if (!file) { fprintf(stderr, "Failed to open %s file: %s\n", label, path); exit(1); }
     fseek(file, 0, SEEK_END); long length = ftell(file); rewind(file);
-    char* buffer = malloc(length);
-    fread(buffer, 1, length, file); fclose(file);
-    if (out_len) *out_len = length;
+    char* buffer = malloc(length + 1); // +1 for null terminator
+    size_t read = fread(buffer, 1, length, file);
+    buffer[read] = '\0'; // Null-terminate for safety
+    fclose(file);
+    if (out_len) *out_len = read; // Return actual bytes read
     return buffer;
 }
 
@@ -134,9 +135,10 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap, 'c');
     char escape_char = find_unused_char_from_buffer(input_buffer, input_len);
 
-    // First pass to count tokens and spaces
+    // Count tokens, spaces, and trailing spaces
     size_t token_count = 0;
     size_t space_count = 0;
+    size_t trailing_spaces = 0;
     bool in_space = false;
     for (size_t i = 0; i < input_len; i++) {
         if (input_buffer[i] == ' ') {
@@ -152,13 +154,22 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
         }
     }
 
+    // Count trailing spaces
+    for (size_t i = input_len; i > 0 && input_buffer[i - 1] == ' '; i--) {
+        trailing_spaces++;
+    }
+    if (trailing_spaces > 255) {
+        fprintf(stderr, "Too many trailing spaces (%zu), max 255 supported\n", trailing_spaces);
+        exit(1);
+    }
+
     Token* tokens = malloc(sizeof(Token) * token_count);
     size_t* spaces_before = calloc(token_count, sizeof(size_t));
     size_t current_token = 0;
     in_space = false;
     size_t current_spaces = 0;
 
-    // Second pass to record tokens and spaces
+    // Record tokens and spaces
     for (size_t i = 0; i < input_len; ) {
         if (input_buffer[i] == ' ') {
             current_spaces++;
@@ -185,6 +196,8 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
 
     FILE* out = fopen("out", "wb");
     fputc(escape_char, out);
+    fputc((unsigned char)trailing_spaces, out); // Write trailing spaces count
+
     char** segments = malloc(sizeof(char*) * threads);
     size_t* seg_lens = calloc(threads, sizeof(size_t));
 
@@ -193,16 +206,14 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
         int tid = omp_get_thread_num();
         size_t start = (token_count * tid) / threads;
         size_t end = (token_count * (tid + 1)) / threads;
-        char* buffer = malloc((end - start) * 16 + input_len); // Extra space for worst case
+        char* buffer = malloc((end - start) * 16 + input_len);
         size_t out_pos = 0;
 
         for (size_t j = start; j < end; j++) {
-            // Add spaces before token
             for (size_t s = 0; s < spaces_before[j]; s++) {
                 buffer[out_pos++] = ' ';
             }
 
-            // Add the token itself
             Token tok = tokens[j];
             char temp[256];
             memcpy(temp, tok.start, tok.len);
@@ -235,17 +246,8 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     free(seg_lens);
     free(tokens);
     free(spaces_before);
-    for (size_t i = 0; i < dict_size; i++) {
-        free(dict[i].word);
-        free(dict[i].symbol);
-    }
-    free(dict);
-    HashEntry *cur, *tmp;
-    HASH_ITER(hh, hashmap, cur, tmp) {
-        HASH_DEL(hashmap, cur);
-        free(cur->key);
-        free(cur);
-    }
+    free_dictionary(dict, dict_size);
+    free_hashmap(hashmap);
 }
 
 void decompress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads) {
@@ -253,18 +255,19 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
     HashEntry* hashmap = NULL;
     DictEntry* dict = load_dictionary(lang_path, dict_path, &dict_size, &hashmap, 'd');
 
-    if (input_len < 1) {
-        fprintf(stderr, "Empty input file\n");
+    if (input_len < 2) {
+        fprintf(stderr, "Invalid input file: too short\n");
         free_dictionary(dict, dict_size);
         free_hashmap(hashmap);
         return;
     }
 
     char escape_char = input_buffer[0];
-    const char* data = input_buffer + 1;
-    size_t data_len = input_len - 1;
+    unsigned char trailing_spaces = (unsigned char)input_buffer[1];
+    const char* data = input_buffer + 2;
+    size_t data_len = input_len - 2;
 
-    // First pass to count tokens and spaces
+    // Count tokens and spaces
     size_t token_count = 0;
     size_t space_count = 0;
     bool in_space = false;
@@ -300,11 +303,10 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
         size_t start = (data_len * tid) / threads;
         size_t end = (data_len * (tid + 1)) / threads;
 
-        // Align to token boundaries
         while (start > 0 && data[start] != ' ') start++;
         while (end < data_len && data[end] != ' ') end++;
 
-        char* buffer = malloc((end - start + 1) * 8 + data_len); // Extra space for worst case
+        char* buffer = malloc((end - start + 1) * 8 + data_len);
         size_t out_pos = 0;
         size_t space_count = 0;
         bool in_space = false;
@@ -360,10 +362,15 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
         seg_space_counts[tid] = space_count;
     }
 
-    // Combine segments
+    // Write segments
     for (int i = 0; i < threads; i++) {
         fwrite(segments[i], 1, seg_lens[i], out);
         free(segments[i]);
+    }
+
+    // Append trailing spaces
+    for (size_t i = 0; i < trailing_spaces; i++) {
+        fputc(' ', out);
     }
 
     fclose(out);
@@ -390,9 +397,8 @@ int main(int argc, char* argv[]) {
 
     if (strcmp(mode_flag, "-c") == 0) compress(dict_path, language_path, input_buffer, input_len, threads);
     else if (strcmp(mode_flag, "-d") == 0) decompress(language_path, dict_path, input_buffer, input_len, threads);
-    else { fprintf(stderr, "Invalid mode\n"); return 1; }
+    else { fprintf(stderr, "Invalid mode\n"); free(input_buffer); return 1; }
 
     free(input_buffer);
     return 0;
 }
-
