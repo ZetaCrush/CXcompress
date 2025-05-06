@@ -1,7 +1,7 @@
 # CXcompress
 CXcompress is a lossless text compressor with the vision of being the best open-source compressor on the internet
 
-This compression library is built to be used on top of the very popular zstd created by Yann Collet at Meta. CXcompress can also be used as a preprocessing step for other compressors like zlib and lzma.
+This compression library is built to be used on top of the very popular zstd created by Yann Collet at Meta. CXcompress can also be used as a preprocessing step for other compressors like zlib and lzma
 
 # Usage (supports MacOS/Linux)
 ### Compilation
@@ -24,6 +24,7 @@ To check how many threads are available on your machine, run this command:
 ```
 sysctl -n hw.logicalcpu
 ```
+The runtime of the compressor will be slower only the first time you run it; after that it will be fast due to caching/initilization
 
 ## TODO
 1. Add OpenCL support for massively parallel operation with GPUs
