@@ -101,7 +101,7 @@ DictEntry* load_dictionary(const char* dict_path, const char* lang_path, size_t*
         HashEntry* item = malloc(sizeof(HashEntry));
         if (mode == 'c') {
             item->key = strdup(entries[i].word);
-            item->value = entries[i].symbol;
+            item->value = strdup(entries[i].symbol);
             size_t slen = strlen(entries[i].symbol);
             if (slen <= 3) {
                 unsigned char a = entries[i].symbol[0];
@@ -111,7 +111,7 @@ DictEntry* load_dictionary(const char* dict_path, const char* lang_path, size_t*
             }
         } else {
             item->key = strdup(entries[i].symbol);
-            item->value = entries[i].word;
+            item->value = strdup(entries[i].word);
         }
         HASH_ADD_KEYPTR(hh, *hashmap, item->key, strlen(item->key), item);
         i++;
@@ -299,6 +299,7 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
                         size_t vlen = strlen(found->value);
                         memcpy(&buffer[out_pos], found->value, vlen);
                         out_pos += vlen;
+                        free(temp);
                         continue;
                     }
                 }
