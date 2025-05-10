@@ -28,6 +28,7 @@ sysctl -n hw.logicalcpu
 The runtime of the compressor will be slower only the first time you run it; after that it will be fast for all files due to caching/initilization
 
 ## TODO
-1. 🚀 Add CUDA support for massively parallel operation with GPUs
+1. 🪟 Add Windows compatability (\r\n)
 2. 📚 More prebuilt dictionaries and language packs
-3. 🔨 Algorithmic development
+3. 🚀 Add CUDA support for massively parallel operation with GPUs
+4. 🔨 Algorithmic development
