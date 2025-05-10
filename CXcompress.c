@@ -44,14 +44,16 @@ TokenSpan* tokenize(const char* input, size_t len, size_t* token_count_out) {
     size_t i = 0, count = 0;
 
     while (i < len) {
-        if (input[i] == ' ') {
-            size_t j = i;
-            while (j < len && input[j] == ' ') j++;
-            spans[count++] = (TokenSpan){ .start = i, .len = j - i, .is_space = true };
-            i = j;
+        if (input[i] == ' ' || input[i] == 0 || input[i] == ',' || input[i] == '.' || input[i] == '?' || input[i] == '!') {
+            spans[count++] = (TokenSpan){ .start = i, .len = 1, .is_space = true };
+            i++;
         } else {
             size_t j = i;
-            while (j < len && input[j] != ' ') j++;
+            while (j < len && input[j] != ' ' && input[j] != 0 &&
+                   input[j] != ',' && input[j] != '.' &&
+                   input[j] != '?' && input[j] != '!') {
+                j++;
+            }
             spans[count++] = (TokenSpan){ .start = i, .len = j - i, .is_space = false };
             i = j;
         }
