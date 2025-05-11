@@ -35,7 +35,8 @@ typedef struct {
 } TokenSpan;
 
 TokenSpan* tokenize(const char* input, size_t len, size_t* token_count_out) {
-    TokenSpan* spans = malloc(sizeof(TokenSpan) * (len + 1));
+    size_t capacity = 1024;
+    TokenSpan* spans = malloc(sizeof(TokenSpan) * capacity);
     if (!spans) {
         fprintf(stderr, "Memory allocation failed for tokenization\n");
         exit(1);
@@ -44,6 +45,14 @@ TokenSpan* tokenize(const char* input, size_t len, size_t* token_count_out) {
     size_t i = 0, count = 0;
 
     while (i < len) {
+        if (count >= capacity) {
+            capacity *= 2;
+            spans = realloc(spans, sizeof(TokenSpan) * capacity);
+            if (!spans) {
+                fprintf(stderr, "Memory reallocation failed for tokenization\n");
+                exit(1);
+            }
+        }
         if (input[i] == ' ' || input[i] == 0 || input[i] == ',' || input[i] == '.' || input[i] == '?' || input[i] == '!' || input[i] == '\n' || input[i] == '\r') {
             spans[count++] = (TokenSpan){ .start = i, .len = 1, .is_space = true };
             i++;
