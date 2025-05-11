@@ -33,4 +33,4 @@ The runtime of the compressor will be slower only the first time you run it; aft
 3. 🔨 Algorithmic development
 
 ## License TL;DR
-This software is free for non-commercial use. For commercial use, we are offering a free 6 month trial to early customers then a licensing fee of 12% of cost savings. For large customers we are happy to negotiate better rates
+This software is free for non-commercial use. For commercial use, we are offering a free 6 month trial to early customers then a licensing fee of 12% of cost savings
