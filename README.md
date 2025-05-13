@@ -21,10 +21,6 @@ You can use the "dict" file as a prebuilt English dictionary and the prebuilt "0
 ```
 
 ## Notes
-To check how many threads are available on your machine, run this command:
-```
-sysctl -n hw.logicalcpu
-```
 The runtime of the compressor will be slower only the first time you run it; after that it will be fast for all files due to caching/initilization
 
 ## TODO
