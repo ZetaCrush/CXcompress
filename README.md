@@ -3,6 +3,9 @@ CXcompress is a lossless text compressor with the vision of being the best open-
 
 This compression library is built to be used before the very popular zstd created by Yann Collet at Meta. CXcompress can also be used as a preprocessing step for other compressors like zlib and lzma
 
+# Algorithm
+This is a dictionary compression algorithm; words are replaced with combinations of letters. Differing from other algorithms, the order of the letter symbols in the dictionary are determined by their frequency in text. A pre-determined order is used to save processing time.
+
 # Usage (supports MacOS/Linux)
 ### Compilation
 ```
