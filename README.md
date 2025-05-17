@@ -6,6 +6,8 @@ This compression library is built to be used before the very popular zstd create
 # Algorithm
 This is a dictionary compression algorithm; words are replaced with combinations of letters. Differing from other algorithms, the order of the letter symbols in the dictionary are determined by their frequency in text. A pre-determined order is used to save processing time.
 
+This dictionary structure increases the Zipfian characteristics of the transformed data, making it easier to compress
+
 # Usage (supports MacOS/Linux)
 ### Compilation
 ```
