@@ -174,7 +174,7 @@ char* read_file(const char* path, const char* label, size_t* out_len) {
     return buffer;
 }
 
-void compress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads) {
+void compress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads, char* out_fname) {
     size_t dict_size = 0, token_count = 0;
     HashEntry* hashmap = NULL;
     DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap, 'c');
@@ -182,7 +182,7 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
 
     TokenSpan* tokens = tokenize(input_buffer, input_len, &token_count);
 
-    FILE* out = fopen("out", "wb");
+    FILE* out = fopen(out_fname, "wb");
     fputc(escape_char, out);
 
     char** segments = malloc(sizeof(char*) * threads);
@@ -252,7 +252,7 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     free_hashmap(hashmap);
 }
 
-void decompress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads) {
+void decompress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads, char* out_fname) {
     size_t dict_size = 0, token_count = 0;
     HashEntry* hashmap = NULL;
     DictEntry* dict = load_dictionary(lang_path, dict_path, &dict_size, &hashmap, 'd');
@@ -264,7 +264,7 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
 
     TokenSpan* tokens = tokenize(data, data_len, &token_count);
 
-    FILE* out = fopen("out_decompressed", "wb");
+    FILE* out = fopen(out_fname, "wb");
     if (!out) {
         fprintf(stderr, "Failed to open decompressed output file\n");
         exit(1);
@@ -349,13 +349,25 @@ int main(int argc, char* argv[]) {
     const char* file_path = argv[2];
     const char* dict_path = argv[3];
     const char* language_path = argv[4];
+    char out_fname[FILENAME_MAX];
     int threads = atoi(argv[5]);
 
     size_t input_len = 0;
     char* input_buffer = read_file(file_path, "Input", &input_len);
 
-    if (strcmp(mode_flag, "-c") == 0) compress(dict_path, language_path, input_buffer, input_len, threads);
-    else if (strcmp(mode_flag, "-d") == 0) decompress(language_path, dict_path, input_buffer, input_len, threads);
+    if (strlen(file_path) > FILENAME_MAX-4) {
+        fprintf(stderr, "Automatic output file name too long.\n");
+        return 2;
+        }
+        strcpy(out_fname, file_path);
+    if (strcmp(mode_flag, "-c") == 0) {
+        strcat(out_fname, ".cxc");
+        compress(dict_path, language_path, input_buffer, input_len, threads, out_fname);
+        }
+    else if (strcmp(mode_flag, "-d") == 0) {
+        strcat(out_fname, ".dec");
+        decompress(language_path, dict_path, input_buffer, input_len, threads, out_fname);
+        }
     else { fprintf(stderr, "Invalid mode\n"); free(input_buffer); return 1; }
 
     free(input_buffer);
