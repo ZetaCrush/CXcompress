@@ -23,7 +23,7 @@ Commercial License
 If you wish to use this software for commercial purposes, you must obtain a Commercial License. Commercial use includes any application, integration, or distribution of this software in a proprietary or revenue-generating context.
 
 Commercial License Terms
-Licensing Fee: A licensing fee is required for any commercial use. To negotiate terms and obtain a commercial license, contact Sam Clymer at clymersam@gmail.com.
+Licensing Fee: A licensing fee is required for any commercial use. To negotiate terms and obtain a commercial license, contact sam@zetacrush.com.
 Prohibition of Derivative Works:
 Definition of Derivative Work: As above, a derivative work includes any adaptation, modification, or integration of this software into a product, service, or software.
 Prohibition: You may not create derivative works of this software under the commercial license unless explicitly negotiated and permitted in a written agreement.
@@ -36,6 +36,6 @@ Enforcement and Compliance
 Any commercial use of this software without obtaining a valid Commercial License is considered a violation of the licensing terms and may result in legal action.
 
 Contact
-For inquiries regarding the licensing of this software or to obtain a commercial license, please contact Sam Clymer at clymersam@gmail.com.
+For inquiries regarding the licensing of this software or to obtain a commercial license, please contact sam@zetacrush.com.
 
 © ZetaCrush, 2025
