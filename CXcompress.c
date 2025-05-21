@@ -17,7 +17,6 @@ KHASH_MAP_INIT_STR(strmap, char*)
 #define MAX_LINE 1024
 #define MAX_ENTRIES 100000
 
-// Faster symbol lookup
 bool symbol_lookup[256][256][256] = {{{ false }}};
 
 typedef struct {
@@ -40,10 +39,10 @@ Arena create_arena(size_t size) {
 }
 
 void* arena_alloc(Arena* a, size_t size) {
-    if (a->used + size > a->size) { // Fix 1: Use -> for pointer dereference
+    if (a->used + size > a->size) {
         a->size = (a->used + size) * 2;
         a->buffer = realloc(a->buffer, a->size);
-        if (!a->buffer) { perror("realloc"); exit(1); } // Fix 1: Use -> for pointer dereference
+        if (!a->buffer) { perror("realloc"); exit(1); }
     }
     void* ptr = a->buffer + a->used;
     a->used += size;
@@ -276,7 +275,7 @@ void compress(const char* dict_path, const char* lang_path,
     khiter_t k;
     for (k = kh_begin(hashmap); k != kh_end(hashmap); ++k) {
         if (kh_exist(hashmap, k)) {
-            free(kh_value(hashmap, k)); // Fix 2: Correctly free hashmap values
+            free(kh_value(hashmap, k));
         }
     }
     kh_destroy(strmap, hashmap);
@@ -287,7 +286,7 @@ void decompress(const char* dict_path, const char* lang_path,
                 const char* input, size_t input_len, int threads) {
     if (input_len < 1) return;
     char escape_char = input[0];
-    const char* data_input = input + 1; // Renamed to avoid confusion with ThreadData 'data'
+    const char* data_input = input + 1;
     size_t data_len = input_len - 1;
 
     // Initialize hash table and load dictionary
@@ -297,7 +296,7 @@ void decompress(const char* dict_path, const char* lang_path,
     // Tokenize input
     Arena arena = create_arena(data_len * 2);
     size_t token_count;
-    TokenSpan* tokens = tokenize(data_input, data_len, &token_count, &arena); // Use data_input
+    TokenSpan* tokens = tokenize(data_input, data_len, &token_count, &arena);
 
     // Prepare output file
     FILE* out = fopen("out.decompressed", "wb");
@@ -346,7 +345,7 @@ void decompress(const char* dict_path, const char* lang_path,
     khiter_t k;
     for (k = kh_begin(hashmap); k != kh_end(hashmap); ++k) {
         if (kh_exist(hashmap, k)) {
-            free(kh_value(hashmap, k)); // Fix 4: Correctly free hashmap values
+            free(kh_value(hashmap, k));
         }
     }
     kh_destroy(strmap, hashmap);
