@@ -39,7 +39,7 @@ Terms:
 
 Fee-based (contact sam@zetacrush.com for pricing).
 
-Grants rights to use, modify, and distribute in closed-source projects.
+Grants rights to use, modify, and distribute in projects.
 
 Derivative works allowed only with written permission.
 
