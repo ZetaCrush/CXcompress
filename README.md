@@ -3,6 +3,11 @@ CXcompress is a lossless text compressor with the vision of being the best open-
 
 This compression library is built to be used before the very popular zstd created by Yann Collet at Meta. CXcompress can also be used as a preprocessing step for other compressors like cmix, zlib, or lzma for improved performance
 
+| Compression Method             | Compressed Size | Time Taken (s) |
+|-------------------------------|----------------:|---------------:|
+| Zstd (level 19 with dictionary)               |        3,212,810 |          2.723 |
+| CXcompress + Zstd (level 19 with dictionary)  |        2,836,003 |          1.631 |
+
 # Algorithm
 This is a dictionary compression algorithm; words are replaced with combinations of letters. Differing from other algorithms, the order of the letter symbols in the dictionary are determined by their frequency in text. A pre-determined order is used to save processing time.
 
@@ -29,6 +34,8 @@ You can use the "dict" file as a prebuilt English dictionary and the prebuilt "0
 The runtime of the compressor will be slower only the first time you run it; after that it will be fast for all files due to caching/initilization
 
 The compressor will exit without compressing under rare scenarios. To use this in production, compress with other algorithm alone if this happens
+
+While using zstd after CXcompress, train a zstd dictionary on 100 copies of the language pack file you are using and call zstd with this dictionary
 
 ## TODO
 1. 📚 More prebuilt dictionaries and language packs
