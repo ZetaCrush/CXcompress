@@ -17,10 +17,18 @@ KHASH_MAP_INIT_STR(strmap, char*) // Defines khash_t(strmap) and related functio
 #define MAX_LINE 1024 // Maximum line length for dictionary/language files
 #define MAX_ENTRIES 100000 // Placeholder, actual entries depend on file size
 
-// Faster symbol lookup for 1-3 character symbols
-// This 3D array allows O(1) lookup for symbols up to 3 characters long.
-// The first char is the first dimension, second char the second, etc.
 bool symbol_lookup[256][256][256] = {{{ false }}};
+
+bool is_delimiter_fast_lookup[256] = {false};
+
+void init_delimiter_lookup(const char* delims) {
+    for (int i = 0; i < 256; ++i) {
+        is_delimiter_fast_lookup[i] = false; // Reset all
+    }
+    for (const char* p = delims; *p != '\0'; ++p) {
+        is_delimiter_fast_lookup[(unsigned char)*p] = true;
+    }
+}
 
 // Structure to represent a token's span in the input data
 typedef struct {
@@ -131,34 +139,30 @@ void unmap_file(MappedFile mf) {
     }
 }
 
-// Optimized tokenizer: identifies words and delimiters without modifying input
 TokenSpan* tokenize(const char* input, size_t len, size_t* token_count, Arena* arena) {
-    // Estimate max tokens (every char could be a token in worst case, but typically less)
-    // Allocate enough space in the arena for the TokenSpan array
     TokenSpan* tokens = arena_alloc(arena, sizeof(TokenSpan) * (len + 1));
     size_t count = 0;
 
     const char* p = input;
     const char* end = input + len;
     // Define common delimiters. Can be extended.
-    const char* delims = " ,.?!\n\r\t"; // Added tab
+    // const char* delims = " ,.?!\n\r\t"; // No longer directly used in the loop, but used for init_delimiter_lookup
 
     while (p < end) {
         const char* start = p;
-        // Check if the current character is a delimiter
-        if (strchr(delims, *p)) {
+        // Optimized check using lookup table
+        if (is_delimiter_fast_lookup[(unsigned char)*p]) {
             tokens[count++] = (TokenSpan){ .start = start - input, .len = 1, .is_space = true };
-            p++; // Move to the next character
+            p++;
         } else {
-            // If not a delimiter, it's the start of a word. Find the end of the word.
-            while (p < end && !strchr(delims, *p)) {
+            while (p < end && !is_delimiter_fast_lookup[(unsigned char)*p]) {
                 p++;
             }
             tokens[count++] = (TokenSpan){ .start = start - input, .len = p - start, .is_space = false };
         }
     }
 
-    *token_count = count; // Return the total number of tokens found
+    *token_count = count;
     return tokens;
 }
 
@@ -519,6 +523,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    const char* common_delimiters = " ,.?!\n\r\t";
+    init_delimiter_lookup(common_delimiters);
+
     // Map the input file into memory
     MappedFile input = map_file(file_path);
     if (input.data == NULL && input.size > 0) { // Check for mapping errors
@@ -540,4 +547,3 @@ int main(int argc, char* argv[]) {
     unmap_file(input); // Unmap the input file
     return 0;
 }
-
