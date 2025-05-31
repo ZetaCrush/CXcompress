@@ -11,7 +11,7 @@ This dictionary structure increases the Zipfian characteristics of the transform
 # Usage (supports MacOS/Linux)
 ### Compilation
 ```
-gcc-14 -O3 -march=native -flto -fopenmp -o CXcompress CXcompress.c
+gcc-14 -Wall -O3 -fopenmp CXcompress.c -o CXcompress
 ```
 
 ### Compression
