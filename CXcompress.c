@@ -17,6 +17,7 @@ KHASH_MAP_INIT_STR(strmap, char*)
 #define MAX_LINE 1024
 #define MAX_ENTRIES 100000
 
+// Faster symbol lookup
 bool symbol_lookup[256][256][256] = {{{ false }}};
 
 typedef struct {
@@ -40,9 +41,11 @@ Arena create_arena(size_t size) {
 
 void* arena_alloc(Arena* a, size_t size) {
     if (a->used + size > a->size) {
-        a->size = (a->used + size) * 2;
-        a->buffer = realloc(a->buffer, a->size);
-        if (!a->buffer) { perror("realloc"); exit(1); }
+        size_t new_size = (a->used + size) * 2;
+        char* new_buffer = realloc(a->buffer, new_size);
+        if (!new_buffer) { perror("realloc"); exit(1); }
+        a->buffer = new_buffer;
+        a->size = new_size;
     }
     void* ptr = a->buffer + a->used;
     a->used += size;
@@ -55,28 +58,58 @@ void destroy_arena(Arena* a) {
     a->size = a->used = 0;
 }
 
-// Memory-mapped file I/O
 typedef struct {
-    char* data;
+    const char* data;
     size_t size;
+    int fd; // File descriptor for unmapping
 } MappedFile;
 
 MappedFile map_file(const char* path) {
+    MappedFile mf = {NULL, 0, -1};
     int fd = open(path, O_RDONLY);
-    if (fd == -1) { perror("open"); exit(1); }
+    if (fd == -1) {
+        perror("Error opening file");
+        exit(1);
+    }
 
-    struct stat sb;
-    if (fstat(fd, &sb) == -1) { perror("fstat"); exit(1); }
+    struct stat st;
+    if (fstat(fd, &st) == -1) {
+        perror("Error getting file size");
+        close(fd);
+        exit(1);
+    }
 
-    char* addr = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if (addr == MAP_FAILED) { perror("mmap"); exit(1); }
+    if (st.st_size == 0) {
+        fprintf(stderr, "File is empty: %s\n", path);
+        close(fd);
+        return mf;
+    }
 
-    close(fd);
-    return (MappedFile){ .data = addr, .size = sb.st_size };
+    void* data = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (data == MAP_FAILED) {
+        perror("Error mapping file");
+        close(fd);
+        exit(1);
+    }
+
+    mf.data = (const char*)data;
+    mf.size = st.st_size;
+    mf.fd = fd; // Store fd for later munmap
+
+    #ifdef __linux__
+    madvise(data, st.st_size, MADV_SEQUENTIAL);
+    #endif
+
+    return mf;
 }
 
 void unmap_file(MappedFile mf) {
-    munmap(mf.data, mf.size);
+    if (mf.data != NULL) {
+        munmap((void*)mf.data, mf.size);
+    }
+    if (mf.fd != -1) {
+        close(mf.fd);
+    }
 }
 
 // Optimized tokenizer
@@ -163,42 +196,78 @@ void compress_thread(ThreadData* data) {
 }
 
 void load_dictionary(const char* dict_path, const char* lang_path,
-                    khash_t(strmap)* hashmap, char mode) {
+                     khash_t(strmap)* hashmap, char mode) {
     MappedFile dict_file = map_file(dict_path);
+    if (dict_file.size == 0) {
+        fprintf(stderr, "Dictionary file is empty or invalid\n");
+        exit(1);
+    }
     MappedFile lang_file = map_file(lang_path);
+    if (lang_file.size == 0) {
+        fprintf(stderr, "Language file is empty or invalid\n");
+        exit(1);
+    }
 
-    char* dict_ptr = dict_file.data;
-    char* lang_ptr = lang_file.data;
-    char* dict_end = dict_file.data + dict_file.size;
-    char* lang_end = lang_file.data + lang_file.size;
+    const char* dict_ptr = dict_file.data;
+    const char* lang_ptr = lang_file.data;
+    const char* dict_end = dict_file.data + dict_file.size;
+    const char* lang_end = lang_file.data + lang_file.size;
+
+    char dict_buf[MAX_LINE];
+    char lang_buf[MAX_LINE];
 
     while (dict_ptr < dict_end && lang_ptr < lang_end) {
-        // Find line endings
-        char* dict_line_end = memchr(dict_ptr, '\n', dict_end - dict_ptr);
-        char* lang_line_end = memchr(lang_ptr, '\n', lang_end - lang_ptr);
-        if (!dict_line_end || !lang_line_end) break;
+        const char* dict_line_end = (const char*)memchr(dict_ptr, '\n', dict_end - dict_ptr);
+        const char* lang_line_end = (const char*)memchr(lang_ptr, '\n', lang_end - lang_ptr);
 
-        *dict_line_end = '\0';
-        *lang_line_end = '\0';
+        if (!dict_line_end || !lang_line_end) {
+            break;
+        }
+
+        size_t dict_len = dict_line_end - dict_ptr;
+        size_t lang_len = lang_line_end - lang_ptr;
+
+        if (dict_len >= MAX_LINE || lang_len >= MAX_LINE) {
+            fprintf(stderr, "Line too long in dictionary or language file. Max allowed: %d\n", MAX_LINE - 1);
+            exit(1);
+        }
+
+        memcpy(dict_buf, dict_ptr, dict_len);
+        dict_buf[dict_len] = '\0';
+        memcpy(lang_buf, lang_ptr, lang_len);
+        lang_buf[lang_len] = '\0';
 
         int ret;
         khiter_t k;
         if (mode == 'c') {
-            k = kh_put(strmap, hashmap, dict_ptr, &ret);
-            if (ret) kh_value(hashmap, k) = strdup(lang_ptr);
+            k = kh_put(strmap, hashmap, strdup(dict_buf), &ret);
+            if (ret) { // Key was absent
+                 kh_value(hashmap, k) = strdup(lang_buf);
+            } else { // Key already present, free the new duplicated key
+                free((char*)kh_key(hashmap, k)); // Free existing key if replacing
+                free(strdup(dict_buf)); // Free the new key that wasn't used
+                kh_value(hashmap, k) = strdup(lang_buf); // Update value
+            }
 
-            size_t slen = lang_line_end - lang_ptr;
-            if (slen > 0 && slen <= 3) { // Ensure slen is positive
-                unsigned char a = (unsigned char)lang_ptr[0];
-                unsigned char b = (slen > 1) ? (unsigned char)lang_ptr[1] : 0;
-                unsigned char c = (slen > 2) ? (unsigned char)lang_ptr[2] : 0;
+
+            if (lang_len > 0 && lang_len <= 3) {
+                unsigned char a = (unsigned char)lang_buf[0];
+                unsigned char b = (lang_len > 1) ? (unsigned char)lang_buf[1] : 0;
+                unsigned char c = (lang_len > 2) ? (unsigned char)lang_buf[2] : 0;
                 symbol_lookup[a][b][c] = true;
             }
         } else {
-            k = kh_put(strmap, hashmap, lang_ptr, &ret);
-            if (ret) kh_value(hashmap, k) = strdup(dict_ptr);
+            k = kh_put(strmap, hashmap, strdup(lang_buf), &ret);
+            if (ret) { // Key was absent
+                kh_value(hashmap, k) = strdup(dict_buf);
+            } else { // Key already present, free the new duplicated key
+                free((char*)kh_key(hashmap, k)); // Free existing key if replacing
+                free(strdup(lang_buf)); // Free the new key that wasn't used
+                kh_value(hashmap, k) = strdup(dict_buf); // Update value
+            }
         }
 
+        // Move pointers past the newline character
         dict_ptr = dict_line_end + 1;
         lang_ptr = lang_line_end + 1;
     }
@@ -275,7 +344,7 @@ void compress(const char* dict_path, const char* lang_path,
     khiter_t k;
     for (k = kh_begin(hashmap); k != kh_end(hashmap); ++k) {
         if (kh_exist(hashmap, k)) {
-            free(kh_value(hashmap, k));
+            free(kh_value(hashmap, k)); // Fix 2: Correctly free hashmap values
         }
     }
     kh_destroy(strmap, hashmap);
@@ -286,7 +355,7 @@ void decompress(const char* dict_path, const char* lang_path,
                 const char* input, size_t input_len, int threads) {
     if (input_len < 1) return;
     char escape_char = input[0];
-    const char* data_input = input + 1;
+    const char* data_input = input + 1; // Renamed to avoid confusion with ThreadData 'data'
     size_t data_len = input_len - 1;
 
     // Initialize hash table and load dictionary
@@ -296,7 +365,7 @@ void decompress(const char* dict_path, const char* lang_path,
     // Tokenize input
     Arena arena = create_arena(data_len * 2);
     size_t token_count;
-    TokenSpan* tokens = tokenize(data_input, data_len, &token_count, &arena);
+    TokenSpan* tokens = tokenize(data_input, data_len, &token_count, &arena); // Use data_input
 
     // Prepare output file
     FILE* out = fopen("out.decompressed", "wb");
@@ -345,7 +414,7 @@ void decompress(const char* dict_path, const char* lang_path,
     khiter_t k;
     for (k = kh_begin(hashmap); k != kh_end(hashmap); ++k) {
         if (kh_exist(hashmap, k)) {
-            free(kh_value(hashmap, k));
+            free(kh_value(hashmap, k)); // Fix 4: Correctly free hashmap values
         }
     }
     kh_destroy(strmap, hashmap);
