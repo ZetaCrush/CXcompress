@@ -38,6 +38,8 @@ The compressor will exit without compressing under rare scenarios. To use this i
 
 While using zstd after CXcompress, train a zstd dictionary on 100 copies of the language pack file you are using and call zstd with this dictionary
 
+If you want even faster performance at the cost of compression ratio, instead of 100 copies of the language pack, train the zstd dict on copies of the language pack with more common symbols appearing more often
+
 ## TODO
 1. 📚 More prebuilt dictionaries and language packs
 2. 🚀 Add CUDA support for massively parallel operation with GPUs
