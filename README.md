@@ -3,6 +3,7 @@ CXcompress is a lossless text compressor with the vision of being the best open-
 
 This compression library is built to be used before the very popular zstd created by Yann Collet at Meta. CXcompress can also be used as a preprocessing step for other compressors like cmix, zlib, or lzma for improved performance
 
+## Tested on 10.2MB Charles Dickens dataset (dickens)
 | Compression Method             | Compressed Size | Time Taken (s) |
 |-------------------------------|----------------:|---------------:|
 | Zstd (level 19 with dictionary)               |        3,212,810 |          2.723 |
