@@ -6,8 +6,8 @@ This compression library is built to be used before the very popular zstd create
 ## Tested on 10.2MB Charles Dickens dataset (a.k.a. dickens)
 | Compression Method             | Compressed Size (bytes) | Time Taken (s) |
 |-------------------------------|----------------:|---------------:|
-| Zstd (level 19 with dictionary)               |        3,212,810 |          2.723 |
-| CXcompress + Zstd (level 19 with dictionary)  |        2,969,829 |          1.790 |
+| Zstd (level 19 with dictionary trained on enwik9)               |        3,212,810 |          2.723 |
+| CXcompress (trained on enwik9) + Zstd (level 19 with dictionary trained on CXcompress dictionary symbols)  |        2,969,829 |          1.790 |
 
 # Algorithm
 This is a dictionary compression algorithm; words are replaced with combinations of letters. Differing from other algorithms, the order of the letter symbols in the dictionary are determined by their frequency in text. A pre-determined order is used to save processing time.
