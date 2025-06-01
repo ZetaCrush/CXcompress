@@ -326,16 +326,7 @@ void decompress(const char* dict_path,const char* lang_path,
                 }
             }
 
-            if (!is_escaped) {
-                HashEntry* found = NULL;
-                HASH_FIND(hh, hashmap, actual, len, found);
-                if (found) {
-                    memcpy(&buffer[out_pos], found->value, found->value_len);
-                    out_pos += found->value_len;
-                    continue;
-                }
-            }
-
+            // fallback: just copy
             memcpy(&buffer[out_pos], actual, len);
             out_pos += len;
         }
@@ -354,7 +345,6 @@ void decompress(const char* dict_path,const char* lang_path,
     free(seg_lens);
     free(tokens);
     free_dictionary(dict, dict_size);
-    free_hashmap(hashmap);
 }
 
 int main(int argc, char* argv[]) {
