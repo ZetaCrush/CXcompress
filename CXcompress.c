@@ -282,6 +282,12 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
         if (end_idx > token_count) end_idx = token_count;
 
         char* buffer = malloc(data_len * 4 + 1024);
+        char* temp = malloc(MAX_LINE);  // allocate once per thread
+        if (!buffer || !temp) {
+            fprintf(stderr, "Memory allocation failed\n");
+            exit(1);
+        }
+
         size_t out_pos = 0;
 
         for (size_t i = start_idx; i < end_idx; i++) {
@@ -296,11 +302,6 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
                 const char* actual = ptr + (is_escaped ? 1 : 0);
                 size_t len = tok.len - (is_escaped ? 1 : 0);
 
-                char* temp = malloc(tok.len + 1);
-                if (!temp) {
-                    fprintf(stderr, "Memory allocation failed\n");
-                    exit(1);
-                }
                 memcpy(temp, actual, len);
                 temp[len] = '\0';
 
@@ -311,19 +312,18 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
                         size_t vlen = strlen(found->value);
                         memcpy(&buffer[out_pos], found->value, vlen);
                         out_pos += vlen;
-                        free(temp);
                         continue;
                     }
                 }
 
                 memcpy(&buffer[out_pos], actual, len);
                 out_pos += len;
-                free(temp);
             }
         }
 
         segments[tid] = buffer;
         seg_lens[tid] = out_pos;
+        free(temp);  // free once per thread
     }
 
     for (int i = 0; i < threads; i++) {
@@ -338,7 +338,6 @@ void decompress(const char* dict_path, const char* lang_path, const char* input_
     free_dictionary(dict, dict_size);
     free_hashmap(hashmap);
 }
-
 
 int main(int argc, char* argv[]) {
     if (argc != 6) {
