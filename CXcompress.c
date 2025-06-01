@@ -189,64 +189,78 @@ char* read_file(const char* path, const char* label, size_t* out_len) {
     return buffer;
 }
 
-void compress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads) {
-    size_t dict_size = 0, token_count = 0;
+void compress(const char* dict_path, const char* lang_path,
+                        const char* input_buffer, size_t input_len, int threads)
+{
+    size_t dict_size = 0;
     HashEntry* hashmap = NULL;
     DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap, 'c');
     char escape_char = find_unused_char_from_buffer(input_buffer, input_len);
 
-    TokenSpan* tokens = tokenize(input_buffer, input_len, &token_count);
-
     FILE* out = fopen("out", "wb");
+    if (!out) {
+        fprintf(stderr, "Failed to open compressed output file\n");
+        exit(1);
+    }
     fputc(escape_char, out);
 
     char** segments = malloc(sizeof(char*) * threads);
     size_t* seg_lens = calloc(threads, sizeof(size_t));
-    size_t tokens_per_thread = (token_count + threads - 1) / threads;
+    size_t chunk_size = (input_len + threads - 1) / threads;
 
     #pragma omp parallel num_threads(threads)
     {
         int tid = omp_get_thread_num();
-        size_t start_idx = tid * tokens_per_thread;
-        size_t end_idx = (tid + 1) * tokens_per_thread;
-        if (end_idx > token_count) end_idx = token_count;
+        size_t start = tid * chunk_size;
+        size_t end = (tid + 1) * chunk_size;
+        if (end > input_len) end = input_len;
 
-        char* buffer = malloc(input_len * 4 + 1024);
+        // backtrack to token boundary if inside a word
+        while (start > 0 && !(input_buffer[start] == ' ' || input_buffer[start] == '\0' || input_buffer[start] == ',' ||
+                              input_buffer[start] == '.' || input_buffer[start] == '?' || input_buffer[start] == '!' ||
+                              input_buffer[start] == '\n' || input_buffer[start] == '\r')) {
+            start--;
+        }
+
+        char* buffer = malloc((end - start) * 4 + 1024);
         size_t out_pos = 0;
 
-        for (size_t i = start_idx; i < end_idx; i++) {
-            TokenSpan tok = tokens[i];
-            const char* ptr = &input_buffer[tok.start];
-
-            if (tok.is_space) {
-                memcpy(&buffer[out_pos], ptr, tok.len);
-                out_pos += tok.len;
+        size_t i = start;
+        while (i < end) {
+            if (input_buffer[i] == ' ' || input_buffer[i] == '\0' || input_buffer[i] == ',' || input_buffer[i] == '.' ||
+                input_buffer[i] == '?' || input_buffer[i] == '!' || input_buffer[i] == '\n' || input_buffer[i] == '\r') {
+                buffer[out_pos++] = input_buffer[i++];
             } else {
-                char* temp = malloc(tok.len + 1);
-                if (!temp) {
-                    fprintf(stderr, "Memory allocation failed\n");
-                    exit(1);
+                size_t j = i;
+                while (j < input_len &&
+                       !(input_buffer[j] == ' ' || input_buffer[j] == '\0' || input_buffer[j] == ',' || input_buffer[j] == '.' ||
+                         input_buffer[j] == '?' || input_buffer[j] == '!' || input_buffer[j] == '\n' || input_buffer[j] == '\r')) {
+                    j++;
                 }
-                memcpy(temp, ptr, tok.len);
-                temp[tok.len] = '\0';
+
+                size_t len = j - i;
+                char temp[1024];
+                if (len >= sizeof(temp)) len = sizeof(temp) - 1;
+                memcpy(temp, &input_buffer[i], len);
+                temp[len] = '\0';
 
                 HashEntry* found = NULL;
                 HASH_FIND_STR(hashmap, temp, found);
-                bool needs_escape = is_symbol_fast(temp, tok.len);
+                bool needs_escape = is_symbol_fast(temp, len);
 
                 if (found) {
-                    size_t slen = strlen(found->value);
-                    memcpy(&buffer[out_pos], found->value, slen);
-                    out_pos += slen;
+                    memcpy(&buffer[out_pos], found->value, found->value_len);
+                    out_pos += found->value_len;
                 } else if (needs_escape) {
                     buffer[out_pos++] = escape_char;
-                    memcpy(&buffer[out_pos], temp, tok.len);
-                    out_pos += tok.len;
+                    memcpy(&buffer[out_pos], temp, len);
+                    out_pos += len;
                 } else {
-                    memcpy(&buffer[out_pos], temp, tok.len);
-                    out_pos += tok.len;
+                    memcpy(&buffer[out_pos], temp, len);
+                    out_pos += len;
                 }
-                free(temp);
+
+                i = j;
             }
         }
 
@@ -262,7 +276,6 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     fclose(out);
     free(segments);
     free(seg_lens);
-    free(tokens);
     free_dictionary(dict, dict_size);
     free_hashmap(hashmap);
 }
