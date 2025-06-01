@@ -10,6 +10,7 @@
 #define MAX_ENTRIES 100000
 
 bool symbol_lookup[256][256][256] = {{{ false }}};
+char* word_lookup[256][256][256] = {{{ NULL }}};
 
 typedef struct {
     char* word;
@@ -127,7 +128,16 @@ DictEntry* load_dictionary(const char* dict_path, const char* lang_path, size_t*
             item->key = strdup(entries[i].symbol);
             item->value = strdup(entries[i].word);
             item->value_len = strlen(item->value);
+
+            size_t slen = strlen(entries[i].symbol);
+            if (slen <= 3) {
+                unsigned char a = entries[i].symbol[0];
+                unsigned char b = (slen > 1) ? entries[i].symbol[1] : 0;
+                unsigned char c = (slen > 2) ? entries[i].symbol[2] : 0;
+                word_lookup[a][b][c] = entries[i].word;
+            }
         }
+
         HASH_ADD_KEYPTR(hh, *hashmap, item->key, strlen(item->key), item);
         i++;
     }
@@ -258,70 +268,93 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
 void decompress(const char* dict_path,const char* lang_path,
                 const char* input_buffer,size_t input_len,int threads)
 {
-    if(input_len<1)return;
-    size_t dict_size=0,token_count=0;HashEntry* hashmap=NULL;
-    DictEntry* dict=load_dictionary(lang_path,dict_path,&dict_size,&hashmap,'d');
+    if (input_len < 1) return;
+    size_t dict_size = 0, token_count = 0;
+    HashEntry* hashmap = NULL;
+    DictEntry* dict = load_dictionary(lang_path, dict_path, &dict_size, &hashmap, 'd');
 
-    char escape_char=input_buffer[0];
-    const char* data=input_buffer+1;
-    size_t data_len=input_len-1;
+    char escape_char = input_buffer[0];
+    const char* data = input_buffer + 1;
+    size_t data_len = input_len - 1;
 
-    TokenSpan* tokens=tokenize(data,data_len,&token_count);
+    TokenSpan* tokens = tokenize(data, data_len, &token_count);
 
-    FILE* out=fopen("out_decompressed","wb");
-    if(!out){fprintf(stderr,"Failed to open decompressed output file\n");exit(1);}
+    FILE* out = fopen("out_decompressed", "wb");
+    if (!out) {
+        fprintf(stderr, "Failed to open decompressed output file\n");
+        exit(1);
+    }
 
-    char** segments=malloc(sizeof(char*)*threads);
-    size_t* seg_lens=calloc(threads,sizeof(size_t));
-    size_t tokens_per_thread=(token_count+threads-1)/threads;
+    char** segments = malloc(sizeof(char*) * threads);
+    size_t* seg_lens = calloc(threads, sizeof(size_t));
+    size_t tokens_per_thread = (token_count + threads - 1) / threads;
 
     #pragma omp parallel num_threads(threads)
     {
-        int tid=omp_get_thread_num();
-        size_t start_idx=tid*tokens_per_thread;
-        size_t end_idx=(tid+1)*tokens_per_thread;if(end_idx>token_count)end_idx=token_count;
+        int tid = omp_get_thread_num();
+        size_t start_idx = tid * tokens_per_thread;
+        size_t end_idx = (tid + 1) * tokens_per_thread;
+        if (end_idx > token_count) end_idx = token_count;
 
-        char* buffer=malloc(data_len*4+1024);
-        size_t out_pos=0;
+        char* buffer = malloc(data_len * 4 + 1024);
+        size_t out_pos = 0;
 
-        for(size_t i=start_idx;i<end_idx;i++){
-            TokenSpan tok=tokens[i];
-            const char* ptr=&data[tok.start];
+        for (size_t i = start_idx; i < end_idx; i++) {
+            TokenSpan tok = tokens[i];
+            const char* ptr = &data[tok.start];
 
-            if(tok.is_space){
-                memcpy(&buffer[out_pos],ptr,tok.len);
-                out_pos+=tok.len;
+            if (tok.is_space) {
+                memcpy(&buffer[out_pos], ptr, tok.len);
+                out_pos += tok.len;
                 continue;
             }
 
-            bool is_escaped=(ptr[0]==escape_char);
-            const char* actual=is_escaped?ptr+1:ptr;
-            size_t       len =tok.len-(is_escaped?1:0);
+            bool is_escaped = (ptr[0] == escape_char);
+            const char* actual = is_escaped ? ptr + 1 : ptr;
+            size_t len = tok.len - (is_escaped ? 1 : 0);
 
-            if(!is_escaped){
-                HashEntry* found=NULL;
-                HASH_FIND(hh,hashmap,actual,len,found);
-                if(found){
+            if (!is_escaped && len <= 3) {
+                unsigned char a = actual[0];
+                unsigned char b = (len > 1) ? actual[1] : 0;
+                unsigned char c = (len > 2) ? actual[2] : 0;
+                char* repl = word_lookup[a][b][c];
+                if (repl) {
+                    size_t repl_len = strlen(repl);
+                    memcpy(&buffer[out_pos], repl, repl_len);
+                    out_pos += repl_len;
+                    continue;
+                }
+            }
+
+            if (!is_escaped) {
+                HashEntry* found = NULL;
+                HASH_FIND(hh, hashmap, actual, len, found);
+                if (found) {
                     memcpy(&buffer[out_pos], found->value, found->value_len);
                     out_pos += found->value_len;
                     continue;
                 }
             }
-            memcpy(&buffer[out_pos],actual,len);
-            out_pos+=len;
+
+            memcpy(&buffer[out_pos], actual, len);
+            out_pos += len;
         }
 
-        segments[tid]=buffer;seg_lens[tid]=out_pos;
+        segments[tid] = buffer;
+        seg_lens[tid] = out_pos;
     }
 
-    for(int i=0;i<threads;i++){
-        fwrite(segments[i],1,seg_lens[i],out);
+    for (int i = 0; i < threads; i++) {
+        fwrite(segments[i], 1, seg_lens[i], out);
         free(segments[i]);
     }
 
     fclose(out);
-    free(segments);free(seg_lens);free(tokens);
-    free_dictionary(dict,dict_size);free_hashmap(hashmap);
+    free(segments);
+    free(seg_lens);
+    free(tokens);
+    free_dictionary(dict, dict_size);
+    free_hashmap(hashmap);
 }
 
 int main(int argc, char* argv[]) {
