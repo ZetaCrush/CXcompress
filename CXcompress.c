@@ -11,6 +11,7 @@
 
 bool symbol_lookup[256][256][256] = {{{ false }}};
 char* word_lookup[256][256][256] = {{{ NULL }}};
+unsigned char word_lookup_len[256][256][256] = {{{ 0 }}};
 
 typedef struct {
     char* word;
@@ -135,6 +136,7 @@ DictEntry* load_dictionary(const char* dict_path, const char* lang_path, size_t*
                 unsigned char b = (slen > 1) ? entries[i].symbol[1] : 0;
                 unsigned char c = (slen > 2) ? entries[i].symbol[2] : 0;
                 word_lookup[a][b][c] = entries[i].word;
+                word_lookup_len[a][b][c] = strlen(entries[i].word);
             }
         }
 
@@ -319,9 +321,10 @@ void decompress(const char* dict_path,const char* lang_path,
                 unsigned char c = (len > 2) ? actual[2] : 0;
                 char* repl = word_lookup[a][b][c];
                 if (repl) {
-                    size_t repl_len = strlen(repl);
+                    size_t repl_len = word_lookup_len[a][b][c];
                     memcpy(&buffer[out_pos], repl, repl_len);
                     out_pos += repl_len;
+
                     continue;
                 }
             }
