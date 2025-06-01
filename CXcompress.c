@@ -189,78 +189,64 @@ char* read_file(const char* path, const char* label, size_t* out_len) {
     return buffer;
 }
 
-void compress(const char* dict_path, const char* lang_path,
-                        const char* input_buffer, size_t input_len, int threads)
-{
-    size_t dict_size = 0;
+void compress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads) {
+    size_t dict_size = 0, token_count = 0;
     HashEntry* hashmap = NULL;
     DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap, 'c');
     char escape_char = find_unused_char_from_buffer(input_buffer, input_len);
 
+    TokenSpan* tokens = tokenize(input_buffer, input_len, &token_count);
+
     FILE* out = fopen("out", "wb");
-    if (!out) {
-        fprintf(stderr, "Failed to open compressed output file\n");
-        exit(1);
-    }
     fputc(escape_char, out);
 
     char** segments = malloc(sizeof(char*) * threads);
     size_t* seg_lens = calloc(threads, sizeof(size_t));
-    size_t chunk_size = (input_len + threads - 1) / threads;
+    size_t tokens_per_thread = (token_count + threads - 1) / threads;
 
     #pragma omp parallel num_threads(threads)
     {
         int tid = omp_get_thread_num();
-        size_t start = tid * chunk_size;
-        size_t end = (tid + 1) * chunk_size;
-        if (end > input_len) end = input_len;
+        size_t start_idx = tid * tokens_per_thread;
+        size_t end_idx = (tid + 1) * tokens_per_thread;
+        if (end_idx > token_count) end_idx = token_count;
 
-        // backtrack to token boundary if inside a word
-        while (start > 0 && !(input_buffer[start] == ' ' || input_buffer[start] == '\0' || input_buffer[start] == ',' ||
-                              input_buffer[start] == '.' || input_buffer[start] == '?' || input_buffer[start] == '!' ||
-                              input_buffer[start] == '\n' || input_buffer[start] == '\r')) {
-            start--;
-        }
-
-        char* buffer = malloc((end - start) * 4 + 1024);
+        char* buffer = malloc(input_len * 4 + 1024);
         size_t out_pos = 0;
 
-        size_t i = start;
-        while (i < end) {
-            if (input_buffer[i] == ' ' || input_buffer[i] == '\0' || input_buffer[i] == ',' || input_buffer[i] == '.' ||
-                input_buffer[i] == '?' || input_buffer[i] == '!' || input_buffer[i] == '\n' || input_buffer[i] == '\r') {
-                buffer[out_pos++] = input_buffer[i++];
-            } else {
-                size_t j = i;
-                while (j < input_len &&
-                       !(input_buffer[j] == ' ' || input_buffer[j] == '\0' || input_buffer[j] == ',' || input_buffer[j] == '.' ||
-                         input_buffer[j] == '?' || input_buffer[j] == '!' || input_buffer[j] == '\n' || input_buffer[j] == '\r')) {
-                    j++;
-                }
+        for (size_t i = start_idx; i < end_idx; i++) {
+            TokenSpan tok = tokens[i];
+            const char* ptr = &input_buffer[tok.start];
 
-                size_t len = j - i;
-                char temp[1024];
-                if (len >= sizeof(temp)) len = sizeof(temp) - 1;
-                memcpy(temp, &input_buffer[i], len);
-                temp[len] = '\0';
+            if (tok.is_space) {
+                memcpy(&buffer[out_pos], ptr, tok.len);
+                out_pos += tok.len;
+            } else {
+                char* temp = malloc(tok.len + 1);
+                if (!temp) {
+                    fprintf(stderr, "Memory allocation failed\n");
+                    exit(1);
+                }
+                memcpy(temp, ptr, tok.len);
+                temp[tok.len] = '\0';
 
                 HashEntry* found = NULL;
                 HASH_FIND_STR(hashmap, temp, found);
-                bool needs_escape = is_symbol_fast(temp, len);
+                bool needs_escape = is_symbol_fast(temp, tok.len);
 
                 if (found) {
-                    memcpy(&buffer[out_pos], found->value, found->value_len);
-                    out_pos += found->value_len;
+                    size_t slen = strlen(found->value);
+                    memcpy(&buffer[out_pos], found->value, slen);
+                    out_pos += slen;
                 } else if (needs_escape) {
                     buffer[out_pos++] = escape_char;
-                    memcpy(&buffer[out_pos], temp, len);
-                    out_pos += len;
+                    memcpy(&buffer[out_pos], temp, tok.len);
+                    out_pos += tok.len;
                 } else {
-                    memcpy(&buffer[out_pos], temp, len);
-                    out_pos += len;
+                    memcpy(&buffer[out_pos], temp, tok.len);
+                    out_pos += tok.len;
                 }
-
-                i = j;
+                free(temp);
             }
         }
 
@@ -276,86 +262,76 @@ void compress(const char* dict_path, const char* lang_path,
     fclose(out);
     free(segments);
     free(seg_lens);
+    free(tokens);
     free_dictionary(dict, dict_size);
     free_hashmap(hashmap);
 }
 
-void decompress(const char* dict_path, const char* lang_path,
-                          const char* input_buffer, size_t input_len, int threads)
+void decompress(const char* dict_path,const char* lang_path,
+                const char* input_buffer,size_t input_len,int threads)
 {
     if (input_len < 1) return;
-
-    size_t dict_size = 0;
-    DictEntry* dict = load_dictionary(lang_path, dict_path, &dict_size, NULL, 'd');
+    size_t dict_size = 0, token_count = 0;
+    HashEntry* hashmap = NULL;
+    DictEntry* dict = load_dictionary(lang_path, dict_path, &dict_size, &hashmap, 'd');
 
     char escape_char = input_buffer[0];
     const char* data = input_buffer + 1;
     size_t data_len = input_len - 1;
 
+    TokenSpan* tokens = tokenize(data, data_len, &token_count);
+
     FILE* out = fopen("out_decompressed", "wb");
     if (!out) {
-        fprintf(stderr, "Failed to open output file\n");
+        fprintf(stderr, "Failed to open decompressed output file\n");
         exit(1);
     }
 
     char** segments = malloc(sizeof(char*) * threads);
     size_t* seg_lens = calloc(threads, sizeof(size_t));
-    size_t chunk_size = (data_len + threads - 1) / threads;
+    size_t tokens_per_thread = (token_count + threads - 1) / threads;
 
     #pragma omp parallel num_threads(threads)
     {
         int tid = omp_get_thread_num();
-        size_t start = tid * chunk_size;
-        size_t end = (tid + 1) * chunk_size;
-        if (end > data_len) end = data_len;
+        size_t start_idx = tid * tokens_per_thread;
+        size_t end_idx = (tid + 1) * tokens_per_thread;
+        if (end_idx > token_count) end_idx = token_count;
 
-        // back up to token boundary
-        while (start > 0 && !(data[start] == ' ' || data[start] == '\0' || data[start] == ',' ||
-                              data[start] == '.' || data[start] == '?' || data[start] == '!' ||
-                              data[start] == '\n' || data[start] == '\r')) {
-            start--;
-        }
-
-        char* buffer = malloc((end - start) * 4 + 1024);
+        char* buffer = malloc(data_len * 4 + 1024);
         size_t out_pos = 0;
 
-        size_t i = start;
-        while (i < end) {
-            if (data[i] == ' ' || data[i] == '\0' || data[i] == ',' || data[i] == '.' ||
-                data[i] == '?' || data[i] == '!' || data[i] == '\n' || data[i] == '\r') {
-                buffer[out_pos++] = data[i++];
-            } else {
-                const char* ptr = &data[i];
-                bool is_escaped = (ptr[0] == escape_char);
-                const char* actual = is_escaped ? ptr + 1 : ptr;
+        for (size_t i = start_idx; i < end_idx; i++) {
+            TokenSpan tok = tokens[i];
+            const char* ptr = &data[tok.start];
 
-                size_t j = i + (is_escaped ? 1 : 0);
-                while (j < data_len &&
-                       !(data[j] == ' ' || data[j] == '\0' || data[j] == ',' || data[j] == '.' ||
-                         data[j] == '?' || data[j] == '!' || data[j] == '\n' || data[j] == '\r')) {
-                    j++;
-                }
-
-                size_t len = j - i - (is_escaped ? 1 : 0);
-
-                if (!is_escaped && len <= 3) {
-                    unsigned char a = actual[0];
-                    unsigned char b = (len > 1) ? actual[1] : 0;
-                    unsigned char c = (len > 2) ? actual[2] : 0;
-                    char* repl = word_lookup[a][b][c];
-                    if (repl) {
-                        size_t repl_len = word_lookup_len[a][b][c];
-                        memcpy(&buffer[out_pos], repl, repl_len);
-                        out_pos += repl_len;
-                        i = j;
-                        continue;
-                    }
-                }
-
-                memcpy(&buffer[out_pos], actual, len);
-                out_pos += len;
-                i = j;
+            if (tok.is_space) {
+                memcpy(&buffer[out_pos], ptr, tok.len);
+                out_pos += tok.len;
+                continue;
             }
+
+            bool is_escaped = (ptr[0] == escape_char);
+            const char* actual = is_escaped ? ptr + 1 : ptr;
+            size_t len = tok.len - (is_escaped ? 1 : 0);
+
+            if (!is_escaped && len <= 3) {
+                unsigned char a = actual[0];
+                unsigned char b = (len > 1) ? actual[1] : 0;
+                unsigned char c = (len > 2) ? actual[2] : 0;
+                char* repl = word_lookup[a][b][c];
+                if (repl) {
+                    size_t repl_len = word_lookup_len[a][b][c];
+                    memcpy(&buffer[out_pos], repl, repl_len);
+                    out_pos += repl_len;
+
+                    continue;
+                }
+            }
+
+            // fallback: just copy
+            memcpy(&buffer[out_pos], actual, len);
+            out_pos += len;
         }
 
         segments[tid] = buffer;
@@ -370,6 +346,7 @@ void decompress(const char* dict_path, const char* lang_path,
     fclose(out);
     free(segments);
     free(seg_lens);
+    free(tokens);
     free_dictionary(dict, dict_size);
 }
 
