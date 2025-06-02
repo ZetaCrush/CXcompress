@@ -37,6 +37,12 @@ typedef struct {
     bool is_space;
 } TokenSpan;
 
+// Helper function to check if character is a delimiter
+static inline bool is_delimiter(char c) {
+    return (c == ' ' || c == 0 || c == ',' || c == '.' ||
+            c == '?' || c == '!' || c == '\n' || c == '\r');
+}
+
 TokenSpan* tokenize(const char* input, size_t len, size_t* token_count_out) {
     size_t capacity = 1024;
     TokenSpan* spans = malloc(sizeof(TokenSpan) * capacity);
@@ -56,15 +62,12 @@ TokenSpan* tokenize(const char* input, size_t len, size_t* token_count_out) {
                 exit(1);
             }
         }
-        if (input[i] == ' ' || input[i] == 0 || input[i] == ',' || input[i] == '.' || input[i] == '?' || input[i] == '!' || input[i] == '\n' || input[i] == '\r') {
+        if (is_delimiter(input[i])) {
             spans[count++] = (TokenSpan){ .start = i, .len = 1, .is_space = true };
             i++;
         } else {
             size_t j = i;
-            while (j < len && input[j] != ' ' && input[j] != 0 &&
-                   input[j] != ',' && input[j] != '.' &&
-                   input[j] != '?' && input[j] != '!' &&
-                   input[j] != '\n' && input[j] != '\r') {
+            while (j < len && !is_delimiter(input[j])) {
                 j++;
             }
             spans[count++] = (TokenSpan){ .start = i, .len = j - i, .is_space = false };
@@ -267,6 +270,145 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     free_hashmap(hashmap);
 }
 
+// Single-pass decompression function
+void decompress_single_pass(const char* dict_path, const char* lang_path,
+                           const char* input_buffer, size_t input_len, int threads) {
+    if (input_len < 1) return;
+
+    size_t dict_size = 0;
+    HashEntry* hashmap = NULL;
+    DictEntry* dict = load_dictionary(lang_path, dict_path, &dict_size, &hashmap, 'd');
+
+    char escape_char = input_buffer[0];
+    const char* data = input_buffer + 1;
+    size_t data_len = input_len - 1;
+
+    FILE* out = fopen("out_decompressed", "wb");
+    if (!out) {
+        fprintf(stderr, "Failed to open decompressed output file\n");
+        exit(1);
+    }
+
+    // Calculate approximate work distribution
+    size_t bytes_per_thread = (data_len + threads - 1) / threads;
+
+    // Find actual split points at token boundaries
+    size_t* split_points = malloc(sizeof(size_t) * (threads + 1));
+    split_points[0] = 0;
+    split_points[threads] = data_len;
+
+    for (int t = 1; t < threads; t++) {
+        size_t approx_pos = t * bytes_per_thread;
+        if (approx_pos >= data_len) {
+            // Adjust for case where we have more threads than needed
+            for (int remaining = t; remaining <= threads; remaining++) {
+                split_points[remaining] = data_len;
+            }
+            threads = t; // Reduce effective thread count
+            break;
+        }
+
+        // Find next delimiter to ensure we split at token boundary
+        while (approx_pos < data_len && !is_delimiter(data[approx_pos])) {
+            approx_pos++;
+        }
+        split_points[t] = approx_pos;
+    }
+
+    char** segments = malloc(sizeof(char*) * threads);
+    size_t* seg_lens = calloc(threads, sizeof(size_t));
+
+    #pragma omp parallel num_threads(threads)
+    {
+        int tid = omp_get_thread_num();
+        size_t start_pos = split_points[tid];
+        size_t end_pos = split_points[tid + 1];
+
+        char* buffer = malloc((end_pos - start_pos) * 4 + 1024);
+        size_t out_pos = 0;
+        size_t i = start_pos;
+
+        while (i < end_pos) {
+            // Handle delimiters (spaces, punctuation, etc.)
+            if (is_delimiter(data[i])) {
+                buffer[out_pos++] = data[i];
+                i++;
+                continue;
+            }
+
+            // Process non-delimiter token
+            size_t token_start = i;
+
+            // Find end of current token
+            while (i < end_pos && !is_delimiter(data[i])) {
+                i++;
+            }
+
+            size_t token_len = i - token_start;
+            const char* token_ptr = &data[token_start];
+
+            // Check if token is escaped
+            bool is_escaped = (token_ptr[0] == escape_char);
+            const char* actual_token = is_escaped ? token_ptr + 1 : token_ptr;
+            size_t actual_len = token_len - (is_escaped ? 1 : 0);
+
+            // Try fast lookup for short symbols (1-3 chars)
+            if (!is_escaped && actual_len <= 3) {
+                unsigned char a = actual_token[0];
+                unsigned char b = (actual_len > 1) ? actual_token[1] : 0;
+                unsigned char c = (actual_len > 2) ? actual_token[2] : 0;
+                char* replacement = word_lookup[a][b][c];
+
+                if (replacement) {
+                    size_t repl_len = word_lookup_len[a][b][c];
+                    memcpy(&buffer[out_pos], replacement, repl_len);
+                    out_pos += repl_len;
+                    continue;
+                }
+            }
+
+            // Fallback: hash table lookup for longer symbols or escaped tokens
+            if (!is_escaped) {
+                char* temp_token = malloc(actual_len + 1);
+                memcpy(temp_token, actual_token, actual_len);
+                temp_token[actual_len] = '\0';
+
+                HashEntry* found = NULL;
+                HASH_FIND_STR(hashmap, temp_token, found);
+
+                if (found) {
+                    memcpy(&buffer[out_pos], found->value, found->value_len);
+                    out_pos += found->value_len;
+                    free(temp_token);
+                    continue;
+                }
+                free(temp_token);
+            }
+
+            // No replacement found, copy original token
+            memcpy(&buffer[out_pos], actual_token, actual_len);
+            out_pos += actual_len;
+        }
+
+        segments[tid] = buffer;
+        seg_lens[tid] = out_pos;
+    }
+
+    // Write all segments to output file
+    for (int i = 0; i < threads; i++) {
+        fwrite(segments[i], 1, seg_lens[i], out);
+        free(segments[i]);
+    }
+
+    fclose(out);
+    free(segments);
+    free(seg_lens);
+    free(split_points);
+    free_dictionary(dict, dict_size);
+    free_hashmap(hashmap);
+}
+
+// Keep the old decompress function for comparison
 void decompress(const char* dict_path,const char* lang_path,
                 const char* input_buffer,size_t input_len,int threads)
 {
@@ -352,7 +494,10 @@ void decompress(const char* dict_path,const char* lang_path,
 
 int main(int argc, char* argv[]) {
     if (argc != 6) {
-        fprintf(stderr, "Usage: %s <-c|-d> <file_path> <dictionary_file_path> <language_file_path> <thread_count>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <-c|-d|-ds> <file_path> <dictionary_file_path> <language_file_path> <thread_count>\n", argv[0]);
+        fprintf(stderr, "  -c:  compress\n");
+        fprintf(stderr, "  -d:  decompress (two-pass)\n");
+        fprintf(stderr, "  -ds: decompress single-pass\n");
         return 1;
     }
     const char* mode_flag = argv[1];
@@ -364,9 +509,17 @@ int main(int argc, char* argv[]) {
     size_t input_len = 0;
     char* input_buffer = read_file(file_path, "Input", &input_len);
 
-    if (strcmp(mode_flag, "-c") == 0) compress(dict_path, language_path, input_buffer, input_len, threads);
-    else if (strcmp(mode_flag, "-d") == 0) decompress(language_path, dict_path, input_buffer, input_len, threads);
-    else { fprintf(stderr, "Invalid mode\n"); free(input_buffer); return 1; }
+    if (strcmp(mode_flag, "-c") == 0) {
+        compress(dict_path, language_path, input_buffer, input_len, threads);
+    } else if (strcmp(mode_flag, "-d") == 0) {
+        decompress(language_path, dict_path, input_buffer, input_len, threads);
+    } else if (strcmp(mode_flag, "-ds") == 0) {
+        decompress_single_pass(dict_path, language_path, input_buffer, input_len, threads);
+    } else {
+        fprintf(stderr, "Invalid mode\n");
+        free(input_buffer);
+        return 1;
+    }
 
     free(input_buffer);
     return 0;
