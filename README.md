@@ -5,7 +5,7 @@ This compression library is built to be used before the very popular zstd create
 
 ## Tested on 10.2MB Charles Dickens dataset (a.k.a. dickens)
 | Compression Method             | Compressed Size (bytes) | Compress Time (s) | Decompress Time (s) |
-|-------------------------------|----------------:|---------------:|
+|-------------------------------|----------------:|---------------:|---------------:|
 | Zstd (level 19 with dictionary trained on enwik9)               |        3,212,810 |          2.723 |          0.041 |
 | CXcompress (trained on enwik9) + Zstd (level 19 with dictionary trained on CXcompress dictionary symbols)  |        2,969,829 |          1.790 |          0.085 |
 
