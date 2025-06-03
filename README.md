@@ -42,6 +42,8 @@ If you want even faster performance at the cost of compression ratio, instead of
 
 Dictionaries for CXcompress can be trained by creating a "\n" separated file of common words
 
+*We are working on much faster decompression - this is a work in progress
+
 ## TODO
 1. 📚 More prebuilt dictionaries and language packs
 2. 🚀 Add CUDA support for massively parallel operation with GPUs
