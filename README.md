@@ -9,6 +9,12 @@ This compression library is built to be used before the very popular zstd create
 | Zstd (level 19 with dictionary trained on enwik9)               |        3,212,810 |          2.723 |          0.041 |
 | CXcompress (trained on enwik9) + Zstd (level 19 with dictionary trained on CXcompress dictionary symbols)  |        2,969,829 |          1.790 |          0.085 |
 
+## Tested on 50KB dickens dataset sample
+| Compression Method             | Compressed Size (bytes) | Compress Time (s) | Decompress Time (s) |
+|-------------------------------|----------------:|---------------:|---------------:|
+| Zstd (level 1 with dictionary trained on enwik9)               |        21,825 |          0.131 |          0.014 |
+| CXcompress (trained on enwik9) + Zstd (level 1 with dictionary trained on CXcompress dictionary symbols)  |        17,457 |          0.113 |          0.038 |
+
 # Algorithm
 This is a dictionary compression algorithm; words are replaced with combinations of letters. Differing from other algorithms, the order of the letter symbols in the dictionary are determined by their frequency in text. A pre-determined order is used to save processing time.
 
