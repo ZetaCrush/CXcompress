@@ -168,6 +168,7 @@ void free_hashmap(HashEntry* hashmap) {
     HASH_ITER(hh, hashmap, current, tmp) {
         HASH_DEL(hashmap, current);
         free(current->key);
+        free(current->value);
         free(current);
     }
 }
