@@ -1,7 +1,7 @@
 # CXcompress v1.1.0
 CXcompress is a lossless text/binary-code compressor with the vision of being the best open-source preprocessing compressor on the internet
 
-![CXcompress Workflow](workflow.png)
+<img src="workflow.png" alt="Alt text" width="40%">
 
 This compression library is built to be used before the very popular zstd created by Yann Collet at Meta. CXcompress can also be used as a preprocessing step for other compressors like cmix, zlib, or lzma for improved performance
 
