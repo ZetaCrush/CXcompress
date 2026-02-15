@@ -30,13 +30,13 @@ gcc-14 -Wall -O3 -fopenmp CXcompress.c -o CXcompress
 
 ### Compression
 ```
-./CXcompress -c <input_file> <dictionary_file> <language_pack_int> <num_threads>
+./CXcompress -c <input_file> <dictionary_file> <language_pack_int> <num_threads> <output_file>
 ```
 You can use the "dict" file as a prebuilt English dictionary and the prebuilt "0" English language pack
 
 ### Decompression
 ```
-./CXcompress -d <compressed_file> <dictionary_file> <language_pack_int> <num_threads>
+./CXcompress -d <compressed_file> <dictionary_file> <language_pack_int> <num_threads> <output_file>
 ```
 
 ## Notes
