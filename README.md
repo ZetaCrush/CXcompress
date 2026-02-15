@@ -40,7 +40,7 @@ You can use the "dict" file as a prebuilt English dictionary and the prebuilt "0
 ```
 
 ## Notes
-The runtime of the compressor will be slower only the first time you run it; after that it will be fast for all files due to caching/initilization
+The runtime of the compressor will be slower only the first time you run it; after that it will be fast for all files due to caching/initialization
 
 The compressor will exit without compressing under rare scenarios. To use this in production, compress with other algorithm alone if this happens
 
