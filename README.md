@@ -22,7 +22,7 @@ This is a dictionary compression algorithm; words are replaced with combinations
 
 This dictionary structure increases the Zipfian characteristics of the transformed data, making it easier to compress
 
-# Usage (supports MacOS/Linux)
+# Usage
 ### Compilation
 ```
 gcc-14 -Wall -O3 -fopenmp CXcompress.c -o CXcompress
