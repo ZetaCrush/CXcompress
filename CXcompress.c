@@ -193,7 +193,7 @@ char* read_file(const char* path, const char* label, size_t* out_len) {
     return buffer;
 }
 
-void compress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads) {
+void compress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads, const char* output_path) {
     size_t dict_size = 0, token_count = 0;
     HashEntry* hashmap = NULL;
     DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap, 'c');
@@ -201,7 +201,11 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
 
     TokenSpan* tokens = tokenize(input_buffer, input_len, &token_count);
 
-    FILE* out = fopen("out", "wb");
+    FILE* out = fopen(output_path, "wb");
+    if (!out) {
+        fprintf(stderr, "Failed to open output file: %s\n", output_path);
+        exit(1);
+    }
     fputc(escape_char, out);
 
     char** segments = malloc(sizeof(char*) * threads);
@@ -272,7 +276,7 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
 }
 
 void decompress(const char* dict_path, const char* lang_path,
-                           const char* input_buffer, size_t input_len, int threads) {
+                           const char* input_buffer, size_t input_len, int threads, const char* output_path) {
     if (input_len < 1) return;
 
     size_t dict_size = 0;
@@ -283,16 +287,14 @@ void decompress(const char* dict_path, const char* lang_path,
     const char* data = input_buffer + 1;
     size_t data_len = input_len - 1;
 
-    FILE* out = fopen("out_decompressed", "wb");
+    FILE* out = fopen(output_path, "wb");
     if (!out) {
-        fprintf(stderr, "Failed to open decompressed output file\n");
+        fprintf(stderr, "Failed to open decompressed output file: %s\n", output_path);
         exit(1);
     }
 
-    // Calculate approximate work distribution
     size_t bytes_per_thread = (data_len + threads - 1) / threads;
 
-    // Find actual split points at token boundaries
     size_t* split_points = malloc(sizeof(size_t) * (threads + 1));
     split_points[0] = 0;
     split_points[threads] = data_len;
@@ -300,15 +302,13 @@ void decompress(const char* dict_path, const char* lang_path,
     for (int t = 1; t < threads; t++) {
         size_t approx_pos = t * bytes_per_thread;
         if (approx_pos >= data_len) {
-            // Adjust for case where we have more threads than needed
             for (int remaining = t; remaining <= threads; remaining++) {
                 split_points[remaining] = data_len;
             }
-            threads = t; // Reduce effective thread count
+            threads = t;
             break;
         }
 
-        // Find next delimiter to ensure we split at token boundary
         while (approx_pos < data_len && !is_delimiter(data[approx_pos])) {
             approx_pos++;
         }
@@ -329,17 +329,13 @@ void decompress(const char* dict_path, const char* lang_path,
         size_t i = start_pos;
 
         while (i < end_pos) {
-            // Handle delimiters (spaces, punctuation, etc.)
             if (is_delimiter(data[i])) {
                 buffer[out_pos++] = data[i];
                 i++;
                 continue;
             }
 
-            // Process non-delimiter token
             size_t token_start = i;
-
-            // Find end of current token
             while (i < end_pos && !is_delimiter(data[i])) {
                 i++;
             }
@@ -347,12 +343,10 @@ void decompress(const char* dict_path, const char* lang_path,
             size_t token_len = i - token_start;
             const char* token_ptr = &data[token_start];
 
-            // Check if token is escaped
             bool is_escaped = (token_ptr[0] == escape_char);
             const char* actual_token = is_escaped ? token_ptr + 1 : token_ptr;
             size_t actual_len = token_len - (is_escaped ? 1 : 0);
 
-            // Try fast lookup for short symbols (1-3 chars)
             if (!is_escaped && actual_len <= 3) {
                 unsigned char a = actual_token[0];
                 unsigned char b = (actual_len > 1) ? actual_token[1] : 0;
@@ -367,7 +361,6 @@ void decompress(const char* dict_path, const char* lang_path,
                 }
             }
 
-            // Fallback: hash table lookup for longer symbols or escaped tokens
             if (!is_escaped) {
                 char* temp_token = malloc(actual_len + 1);
                 memcpy(temp_token, actual_token, actual_len);
@@ -385,7 +378,6 @@ void decompress(const char* dict_path, const char* lang_path,
                 free(temp_token);
             }
 
-            // No replacement found, copy original token
             memcpy(&buffer[out_pos], actual_token, actual_len);
             out_pos += actual_len;
         }
@@ -394,7 +386,6 @@ void decompress(const char* dict_path, const char* lang_path,
         seg_lens[tid] = out_pos;
     }
 
-    // Write all segments to output file
     for (int i = 0; i < threads; i++) {
         fwrite(segments[i], 1, seg_lens[i], out);
         free(segments[i]);
@@ -409,8 +400,9 @@ void decompress(const char* dict_path, const char* lang_path,
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 6) {
-        fprintf(stderr, "Usage: %s <-c|-d> <file_path> <dictionary_file_path> <language_file_path> <thread_count>\n", argv[0]);
+    // Required arguments: mode, input, dict, lang, threads, output (6 total)
+    if (argc != 7) {
+        fprintf(stderr, "Usage: %s <-c|-d> <input_file> <dict_file> <lang_file> <threads> <output_file>\n", argv[0]);
         fprintf(stderr, "  -c:  compress\n");
         fprintf(stderr, "  -d:  decompress\n");
         return 1;
@@ -420,14 +412,15 @@ int main(int argc, char* argv[]) {
     const char* dict_path = argv[3];
     const char* language_path = argv[4];
     int threads = atoi(argv[5]);
+    const char* output_path = argv[6];
 
     size_t input_len = 0;
     char* input_buffer = read_file(file_path, "Input", &input_len);
 
     if (strcmp(mode_flag, "-c") == 0) {
-        compress(dict_path, language_path, input_buffer, input_len, threads);
+        compress(dict_path, language_path, input_buffer, input_len, threads, output_path);
     } else if (strcmp(mode_flag, "-d") == 0) {
-        decompress(language_path, dict_path, input_buffer, input_len, threads);
+        decompress(language_path, dict_path, input_buffer, input_len, threads, output_path);
     } else {
         fprintf(stderr, "Invalid mode\n");
         free(input_buffer);
