@@ -56,4 +56,4 @@ Dictionaries for CXcompress can be trained by creating a "\n" separated file of 
 3. 🔨 Algorithmic development
 
 ## License TL;DR
-This software is free for non-commercial use. For commercial use, we are offering a free 6 month trial to early customers then a licensing fee of 12% of cost savings
+This software is free for non-commercial use
