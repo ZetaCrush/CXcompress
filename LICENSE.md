@@ -1,61 +1,30 @@
-Dual License
-This software is available under two licensing options:
+BSD License
 
-Free Non-Commercial License (for personal/non-commercial use)
+For ZetaCrush software
 
-Commercial License (for business/proprietary use)
+Copyright (c) ZetaCrush and affiliates. All rights reserved.
 
-1. Free Non-Commercial License
-Grant of Rights:
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
 
-You may use, modify, and distribute this software only for non-commercial purposes.
+ * Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
 
-Non-commercial means personal, educational, or non-revenue-generating use.
+ * Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
 
-Restrictions:
+ * Neither the name Facebook, nor Meta, nor the names of its contributors may
+   be used to endorse or promote products derived from this software without
+   specific prior written permission.
 
-❌ No Commercial Use: Any business, SaaS, or monetized use requires a Commercial License.
-
-❌ No Derivative Works: You may not create modified versions or integrate this software into other projects without explicit permission.
-
-❌ No Redistribution in Competing Products: You may not redistribute this software (modified or unmodified) as part of a competing product/service.
-
-Conditions:
-
-Attribution required (must credit original author).
-
-No warranty or liability.
-
-2. Commercial License
-Required for:
-
-Any business, government, or revenue-generating use.
-
-Any integration into proprietary software.
-
-Any SaaS, hosted, or distributed commercial product.
-
-Terms:
-
-Fee-based (contact sam@zetacrush.com for pricing).
-
-Grants rights to use, modify, and distribute in projects.
-
-Derivative works allowed only with written permission.
-
-Optional support & customization available.
-
-Key Differences from GPL Approach
-✔ No GPL restrictions → Your terms are enforceable.
-✔ Commercial prohibition is valid (unlike with GPL).
-✔ Derivative works control (you can restrict forks/modifications).
-✔ Dual-license still works (free for non-commercial, paid for business).
-
-Enforcement & Compliance
-Violations of the Non-Commercial License will be treated as copyright infringement.
-
-Unauthorized commercial use or derivative works may result in legal action.
-
-Contact: For commercial licensing, email sam@zetacrush.com.
-
-© ZetaCrush, 2025
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
