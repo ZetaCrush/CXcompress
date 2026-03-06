@@ -46,6 +46,8 @@ The compressor will exit without compressing under rare scenarios. To use this i
 
 While using zstd after CXcompress, train a zstd dictionary on 100 copies of the language pack file you are using and call zstd with this dictionary
 
+If you want to learn tricks on how to use CXcompress to achieve either better compression or faster speed, contact clymersam@gmail.com
+
 Dictionaries for CXcompress can be trained by creating a "\n" separated file of common words
 
 ## TODO
