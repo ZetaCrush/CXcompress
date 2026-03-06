@@ -50,4 +50,4 @@ Dictionaries for CXcompress can be trained by creating a "\n" separated file of 
 3. 🔨 Algorithmic development
 
 ## License TL;DR
-This software is free for non-commercial use
+This software is free with optional paid upgrades
