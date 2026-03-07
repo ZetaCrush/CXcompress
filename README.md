@@ -2,14 +2,9 @@
 ## Tested on 10.2MB Charles Dickens dataset (a.k.a. dickens)
 | Compression Method             | Compressed Size (bytes) | Compress Time (s) | Decompress Time (s) |
 |-------------------------------|----------------:|---------------:|---------------:|
-| Zstd (level 19 with dictionary trained on enwik9)               |        3,212,810 |          2.723 |          0.041 |
-| CXcompress (trained on enwik9) + Zstd (level 19 with dictionary trained on CXcompress dictionary symbols)  |        2,969,829 |          1.790 |          0.085 |
+| Zstd (level 10 with dictionary trained on enwik9)               |        3,212,810 |          0.477 |          0.036 |
+| CXcompress (trained on enwik9) + Zstd (level 10 with dictionary trained on CXcompress dictionary symbols)  |        2,816,922 |          0.376 |          0.08 |
 
-Tested on 50KB dickens dataset sample
-| Compression Method             | Compressed Size (bytes) | Compress Time (s) | Decompress Time (s) |
-|-------------------------------|----------------:|---------------:|---------------:|
-| Zstd (level 1 with dictionary trained on enwik9)               |        21,825 |          0.131 |          0.014 |
-| CXcompress (trained on enwik9) + Zstd (level 1 with dictionary trained on CXcompress dictionary symbols)  |        17,457 |          0.113 |          0.038 |	
 
 CXcompress is a lossless text/binary-code compressor with the vision of being the best open-source preprocessing compressor on the internet
 
@@ -43,8 +38,6 @@ You can use the "dict" file as a prebuilt English dictionary and the prebuilt "0
 The runtime of the compressor will be slower only the first time you run it; after that it will be fast for all files due to caching/initialization
 
 The compressor will exit without compressing under rare scenarios. To use this in production, compress with other algorithm alone if this happens
-
-While using zstd after CXcompress, train a zstd dictionary on 100 copies of the language pack file you are using and call zstd with this dictionary
 
 If you want to learn tricks on how to use CXcompress to achieve either better compression or faster speed, contact clymersam@gmail.com
 
