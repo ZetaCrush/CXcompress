@@ -1,10 +1,4 @@
 # CXcompress v1.1.0
-CXcompress is a lossless text/binary-code compressor with the vision of being the best open-source preprocessing compressor on the internet
-
-<img src="workflow.png" alt="Alt text" width="40%">
-
-This compression library is built to be used before the very popular zstd created by Yann Collet at Meta. CXcompress can also be used as a preprocessing step for other compressors like cmix, zlib, or lzma for improved performance
-
 ## Tested on 10.2MB Charles Dickens dataset (a.k.a. dickens)
 | Compression Method             | Compressed Size (bytes) | Compress Time (s) | Decompress Time (s) |
 |-------------------------------|----------------:|---------------:|---------------:|
@@ -16,6 +10,12 @@ Tested on 50KB dickens dataset sample
 |-------------------------------|----------------:|---------------:|---------------:|
 | Zstd (level 1 with dictionary trained on enwik9)               |        21,825 |          0.131 |          0.014 |
 | CXcompress (trained on enwik9) + Zstd (level 1 with dictionary trained on CXcompress dictionary symbols)  |        17,457 |          0.113 |          0.038 |	
+
+CXcompress is a lossless text/binary-code compressor with the vision of being the best open-source preprocessing compressor on the internet
+
+<img src="workflow.png" alt="Alt text" width="40%">
+
+This compression library is built to be used before the very popular zstd created by Yann Collet at Meta. CXcompress can also be used as a preprocessing step for other compressors like cmix, zlib, or lzma for improved performance
 
 # Algorithm
 This is a dictionary compression algorithm; words are replaced with combinations of letters. Differing from other algorithms, the order of the letter symbols in the dictionary are determined by their frequency in text. A pre-determined order is used to save processing time.
