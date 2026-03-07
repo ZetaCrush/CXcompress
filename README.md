@@ -3,7 +3,7 @@
 | Compression Method             | Compressed Size (bytes) | Compress Time (s) | Decompress Time (s) |
 |-------------------------------|----------------:|---------------:|---------------:|
 | Zstd (level 10 with dictionary trained on enwik9)               |        3,212,810 |          0.477 |          0.036 |
-| CXcompress (trained on enwik9) + Zstd (level 10 with dictionary trained on CXcompress dictionary symbols)  |        2,816,922 |          0.376 |          0.08 |
+| CXcompress (trained on enwik9) + Zstd (level 10)  |        2,901,301 |          0.376 |          0.08 |
 
 
 CXcompress is a lossless text/binary-code compressor with the vision of being the best open-source preprocessing compressor on the internet
