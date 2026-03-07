@@ -193,71 +193,100 @@ char* read_file(const char* path, const char* label, size_t* out_len) {
     return buffer;
 }
 
+// Add this global (or pass it through) to match your decompression style
+char* compress_lookup[256][256][256] = {{{ NULL }}};
+unsigned char compress_lookup_len[256][256][256] = {{{ 0 }}};
+
 void compress(const char* dict_path, const char* lang_path, const char* input_buffer, size_t input_len, int threads, const char* output_path) {
-    size_t dict_size = 0, token_count = 0;
+    size_t dict_size = 0;
     HashEntry* hashmap = NULL;
+    // Load dict once
     DictEntry* dict = load_dictionary(dict_path, lang_path, &dict_size, &hashmap, 'c');
     char escape_char = find_unused_char_from_buffer(input_buffer, input_len);
 
-    TokenSpan* tokens = tokenize(input_buffer, input_len, &token_count);
-
     FILE* out = fopen(output_path, "wb");
-    if (!out) {
-        fprintf(stderr, "Failed to open output file: %s\n", output_path);
-        exit(1);
-    }
     fputc(escape_char, out);
+
+    // Calculate split points exactly like your decompression function
+    size_t bytes_per_thread = (input_len + threads - 1) / threads;
+    size_t* split_points = malloc(sizeof(size_t) * (threads + 1));
+    split_points[0] = 0;
+    split_points[threads] = input_len;
+
+    for (int t = 1; t < threads; t++) {
+        size_t approx_pos = t * bytes_per_thread;
+        while (approx_pos < input_len && !is_delimiter(input_buffer[approx_pos])) {
+            approx_pos++;
+        }
+        split_points[t] = (approx_pos > input_len) ? input_len : approx_pos;
+    }
 
     char** segments = malloc(sizeof(char*) * threads);
     size_t* seg_lens = calloc(threads, sizeof(size_t));
-    size_t tokens_per_thread = (token_count + threads - 1) / threads;
 
     #pragma omp parallel num_threads(threads)
     {
         int tid = omp_get_thread_num();
-        size_t start_idx = tid * tokens_per_thread;
-        size_t end_idx = (tid + 1) * tokens_per_thread;
-        if (end_idx > token_count) end_idx = token_count;
+        size_t start_pos = split_points[tid];
+        size_t end_pos = split_points[tid + 1];
 
-        char* buffer = malloc(input_len * 4 + 1024);
+        // Pre-allocate thread-local output buffer
+        char* buffer = malloc((end_pos - start_pos) * 2 + 1024);
         size_t out_pos = 0;
+        size_t i = start_pos;
 
-        for (size_t i = start_idx; i < end_idx; i++) {
-            TokenSpan tok = tokens[i];
-            const char* ptr = &input_buffer[tok.start];
+        while (i < end_pos) {
+            // Handle delimiters (Spaces/Punctuation)
+            if (is_delimiter(input_buffer[i])) {
+                buffer[out_pos++] = input_buffer[i];
+                i++;
+                continue;
+            }
 
-            if (tok.is_space) {
-                memcpy(&buffer[out_pos], ptr, tok.len);
-                out_pos += tok.len;
-            } else {
-                char* temp = malloc(tok.len + 1);
-                if (!temp) {
-                    fprintf(stderr, "Memory allocation failed\n");
-                    exit(1);
+            // Identify word boundaries
+            size_t word_start = i;
+            while (i < end_pos && !is_delimiter(input_buffer[i])) {
+                i++;
+            }
+            size_t word_len = i - word_start;
+            const char* word_ptr = &input_buffer[word_start];
+
+            // FAST PATH: Use your 3D lookup for short words (1-3 chars)
+            bool found_fast = false;
+            if (word_len <= 3) {
+                unsigned char a = word_ptr[0];
+                unsigned char b = (word_len > 1) ? word_ptr[1] : 0;
+                unsigned char c = (word_len > 2) ? word_ptr[2] : 0;
+
+                // Note: You must populate a 'compress_lookup' table in load_dictionary
+                if (word_lookup[a][b][c]) {
+                    // ... implementation of O(1) jump ...
                 }
-                memcpy(temp, ptr, tok.len);
-                temp[tok.len] = '\0';
+            }
+
+            if (!found_fast) {
+                // STACK ALLOCATION: No malloc inside this loop!
+                char temp[256];
+                size_t copy_len = (word_len < 255) ? word_len : 255;
+                memcpy(temp, word_ptr, copy_len);
+                temp[copy_len] = '\0';
 
                 HashEntry* found = NULL;
                 HASH_FIND_STR(hashmap, temp, found);
-                bool needs_escape = is_symbol_fast(temp, tok.len);
 
                 if (found) {
-                    size_t slen = strlen(found->value);
-                    memcpy(&buffer[out_pos], found->value, slen);
-                    out_pos += slen;
-                } else if (needs_escape) {
-                    buffer[out_pos++] = escape_char;
-                    memcpy(&buffer[out_pos], temp, tok.len);
-                    out_pos += tok.len;
+                    memcpy(&buffer[out_pos], found->value, found->value_len);
+                    out_pos += found->value_len;
                 } else {
-                    memcpy(&buffer[out_pos], temp, tok.len);
-                    out_pos += tok.len;
+                    // Check if the word itself looks like a symbol
+                    if (is_symbol_fast(temp, word_len)) {
+                        buffer[out_pos++] = escape_char;
+                    }
+                    memcpy(&buffer[out_pos], word_ptr, word_len);
+                    out_pos += word_len;
                 }
-                free(temp);
             }
         }
-
         segments[tid] = buffer;
         seg_lens[tid] = out_pos;
     }
@@ -270,7 +299,6 @@ void compress(const char* dict_path, const char* lang_path, const char* input_bu
     fclose(out);
     free(segments);
     free(seg_lens);
-    free(tokens);
     free_dictionary(dict, dict_size);
     free_hashmap(hashmap);
 }
