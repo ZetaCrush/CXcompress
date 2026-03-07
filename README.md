@@ -37,7 +37,7 @@ You can use the "dict" file as a prebuilt English dictionary and the prebuilt "0
 ## Notes
 The runtime of the compressor will be slower only the first time you run it; after that it will be fast for all files due to caching/initialization
 
-The compressor will exit without compressing under rare scenarios. To use this in production, compress with other algorithm alone if this happens
+The compressor will exit without compressing if you run out of memory
 
 If you want to learn tricks on how to use CXcompress to achieve either better compression or faster speed, contact clymersam@gmail.com
 
