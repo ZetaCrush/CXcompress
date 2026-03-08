@@ -2,8 +2,8 @@
 ## Tested on 10.2MB Charles Dickens dataset (a.k.a. dickens)
 | Compression Method             | Compressed Size (bytes) | Compress Time (s) | Decompress Time (s) |
 |-------------------------------|----------------:|---------------:|---------------:|
-| Zstd (level 10 with dictionary trained on enwik9)               |        3,212,810 |          0.477 |          0.036 |
-| CXcompress (trained on enwik9) + Zstd (level 10)  |        2,901,301 |          0.376 |          0.08 |
+| Zstd (level 10 with dictionary trained on enwik8)               |        3,212,810 |          0.477 |          0.036 |
+| CXcompress (trained on enwik8) + Zstd (level 10)  |        2,901,301 |          0.376 |          0.08 |
 
 
 CXcompress is a lossless text/binary-code compressor with the vision of being the best open-source preprocessing compressor on the internet
